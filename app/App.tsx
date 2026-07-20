@@ -1,11 +1,24 @@
-import { Text, View } from "react-native";
+import { ActivityIndicator, SafeAreaView, StatusBar, View } from "react-native";
+import { useAuth } from "@/hooks/useAuth";
+import SignInScreen from "@/screens/SignInScreen";
+import ListScreen from "@/screens/ListScreen";
+import { colors } from "@/theme";
 
-// Placeholder shell. Screens live in src/screens; nothing is built on top of
-// the server logic until the Section 6 test suite passes (see /tests).
 export default function App() {
+  const { userId, loading } = useAuth();
+
   return (
-    <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-      <Text>Cartpool</Text>
-    </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+      <StatusBar barStyle="dark-content" />
+      {loading ? (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+          <ActivityIndicator size="large" color={colors.accent} />
+        </View>
+      ) : userId ? (
+        <ListScreen userId={userId} />
+      ) : (
+        <SignInScreen />
+      )}
+    </SafeAreaView>
   );
 }

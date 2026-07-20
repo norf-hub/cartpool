@@ -1,0 +1,393 @@
+Cartpool
+
+Product Concept & Feature Spec
+
+Version 3 — July 19, 2026
+
+Changes from v2
+
+Version 3 incorporates four corrections identified in review of the v2
+spec and its technical addendum. Everything else carries over from v2
+unchanged.
+
+-   Self-purchase allowed. The addendum's item state machine restricted
+    marking an item purchased to “any member other than the adder.” That
+    restriction is dropped: any active member, including the adder, can
+    mark an open item purchased. A solo list only works if you can check
+    off your own items, and on shared lists the shopper routinely buys
+    their own items on the same trip. (See Section 4.)
+
+-   Solo list is a real one-member group. v2 counted the solo list as
+    one of the 3 free groups, but the data model represented solo items
+    with a null group — leaving no group row to count. The solo list is
+    now an actual group with one member, created at signup. Group
+    counting works naturally, every item has a group, and
+    merge-on-first-invite reduces to a simple item move. (See Sections 2
+    and 9.)
+
+-   Blocking co-placement is now bidirectional. A deliberate behavior
+    change from v2's one-directional rule: after A blocks B, neither can
+    join a group containing the other. One-directional blocking would
+    have let B follow A into A's other groups, defeating the purpose.
+    Removal and notification behavior is unchanged and still
+    one-directional — only A leaves shared groups, and B is never
+    notified. (See Section 3.)
+
+-   Downgrade freeze scope clarified. When a paid subscription lapses
+    with more than 3 groups, the user is read-only everywhere until they
+    confirm which 3 groups to keep; after confirming, the kept 3 return
+    to full read-write and only the excess groups remain read-only. (See
+    Section 9.)
+
+-   Implementation note added. The 4-active-member cap and
+    first-come-first-served waitlist promotion are race-prone under
+    concurrent joins and cannot be plain declarative database
+    constraints — they require a trigger or serialized insert check.
+    (See Section 3.)
+
+1. Overview
+
+Cartpool is a shopping list app for iOS and Android. On the surface it
+looks and works like a simple, personal shopping list. The twist: up to
+four people (family, friends, neighbors) can form a group and share one
+running list. Anyone in the group can add items for themselves, and
+anyone going shopping can pick up and check off items for everyone else.
+Payment for picked-up items is settled outside the app (cash, Venmo, in
+person) — Cartpool only tracks who wants what and who bought it.
+
+A secondary but central use case: bulk-store shopping (Costco, Sam's
+Club, etc.). One person buys a bulk item and tags it as shared; other
+group members opt in with a single tap, no quantity math required.
+
+Primary audience
+
+-   Anyone who wants a normal personal shopping list, with the option to
+    loop in others.
+
+-   Small friend/family/neighbor pods who informally shop for each
+    other.
+
+-   Elderly users living alone or with limited mobility, who rely on a
+    neighbor or family member to pick things up — accessibility is a
+    first-class design constraint, not an add-on.
+
+2. Core User Journey
+
+-   Download the app and sign in with a phone number. A personal solo
+    group — a real group with you as its only member — is created
+    automatically. It looks and works like a plain personal list and
+    requires nobody else.
+
+-   Add items to the list as with any shopping list app, and check them
+    off yourself as you buy them.
+
+-   Optionally invite up to three other people (phone number, email, or
+    shareable link/code). Inviting someone into your solo group simply
+    adds them to that existing group — the list is already there, so
+    there is no merge step.
+
+-   Accepting your first invite into someone else's group moves your
+    solo group's open items into the joined group's list; the emptied
+    solo group is then deleted.
+
+-   Everyone in a group can add items, see everyone else's items, and
+    mark any open item as purchased when they buy it — their own items
+    included.
+
+-   Marking an item purchased is per-item, not all-or-nothing — a
+    shopper can fulfill some people's items on a trip and leave the rest
+    open for someone else to pick up later.
+
+-   A user who belongs to multiple groups sees one merged list, with
+    each item's source group visually distinguished (color tag, group
+    label, or grouped sections).
+
+-   A user always has at least one group: if they ever leave or lose
+    their last group, a fresh solo group is created automatically.
+
+3. Groups & Membership
+
+Group size: Maximum 4 active members per group. Implementation note:
+this cap — and first-come-first-served waitlist promotion below — is
+race-prone under concurrent joins and cannot be expressed as a plain
+declarative database constraint; enforce it with a trigger or a
+serialized insert check.
+
+Membership model: Fully symmetric — no admin, no owner, no roles. Nobody
+can remove anybody else. The only way to leave is to leave yourself.
+
+Joining: By phone number, email, or shareable link/code. The invitee
+must actively accept — invites are never automatic.
+
+Invite expiry: 7 days, unless revoked earlier. An invite is tied to the
+group, not the person who sent it, so it stays valid even if the inviter
+later leaves the group.
+
+Full groups: If a group already has 4 members and someone tries to join
+via a still-valid link or code, they're placed on a waitlist and
+notified automatically if a spot opens. Promotion is strictly
+first-come-first-served by request timestamp.
+
+Email-invited members: Since login is phone-based, an email-invited
+person must eventually attach a phone number to fully participate.
+
+Leaving a group
+
+-   Any open (unpurchased) items the leaver added vanish for everyone
+    remaining in the group.
+
+-   Already-purchased items the leaver added survive for a 2-day grace
+    period after departure, so the buyer isn't left holding an
+    untracked, unpaid item. During the grace period, the departed
+    member's name still shows on those items.
+
+-   If the buyer of one of those items also leaves during the grace
+    period, their name and the purchased record still stand — it's
+    treated as a historical transaction record, not a live membership
+    fact.
+
+-   If the last member leaves a group, the group and its remaining data
+    are deleted.
+
+Blocking
+
+Blocking uses the same vanish rules as a voluntary departure. Its
+removal and notification effects are one-directional; its co-placement
+bar is bidirectional (a deliberate change from v2):
+
+-   When A blocks B, A leaves every group A and B share (A's open items
+    vanish per the normal leave rule).
+
+-   B is not removed from anything and is not notified that they've been
+    blocked.
+
+-   Neither A nor B can subsequently join a group that contains the
+    other — via invite, link, code, or waitlist promotion. All such
+    rejections are silent. A waitlist entry whose promotion would
+    co-place a blocked pair (either direction) is skipped, and the next
+    eligible entry is promoted instead.
+
+-   Rationale for the two-way bar: a one-way bar would still let B join
+    A's other groups, which defeats the point of blocking.
+
+-   There is no ability to kick another member out of a group directly.
+
+4. Items
+
+An item moves through three states: Open → Purchased → Removed.
+
+-   Only the person who added an item can edit its text or remove it
+    from the list — this prevents an item from disappearing before the
+    person who requested it has actually picked it up or paid for it.
+
+-   Any active group member — including the person who added it — can
+    mark an open item as purchased. Checking off your own items is the
+    normal flow on a solo list, and common on shared ones (the shopper
+    often buys their own items on the same trip).
+
+-   If two people want the same item (e.g., you and your neighbor both
+    want broccoli), it stays as two separate rows, one under each person
+    — items are never merged.
+
+-   Purchased items show who bought them and when, not just a checkmark,
+    since that detail matters for settling up in person afterward.
+
+-   Marking something purchased by mistake is recoverable: the buyer
+    (and only the buyer) can unmark it back to Open.
+
+-   Race condition: if two members buy the same open item close together
+    before the app has synced, the app needs close-to-real-time sync and
+    a graceful “already purchased” state for whoever's action arrives
+    second, rather than a conflict or duplicate purchase.
+
+-   No payment, IOU, or balance tracking happens in the app. A
+    lightweight, non-financial “what I bought for others recently” view
+    is included to reduce disputes without turning into a ledger.
+
+5. Bulk Items — a headline feature
+
+Group shopping is most valuable at bulk retailers like Costco or Sam's
+Club, where quantities are too large for one person and splitting a case
+among neighbors is the whole point. This is intended to be one of
+Cartpool's main selling points, not a footnote.
+
+-   Any item can be tagged as bulk/shared.
+
+-   It's added once, by whoever is buying it.
+
+-   Other group members opt in with a single tap — binary in/out, no
+    quantity math. Payment for each person's share is settled outside
+    the app, same as any other item.
+
+-   Opt-in can happen either way: pre-commit before the item is bought
+    (a request, e.g. “count me in if you get the 24-pack”), or after —
+    the buyer can retroactively assign people to a bulk item they
+    already purchased.
+
+-   A free-text note field is available on bulk items (e.g. “get me the
+    unsalted kind”), since there's deliberately no structured quantity
+    or variant field.
+
+-   If the adder edits a bulk item's text after someone has
+    pre-committed, that person's opt-in must be reconfirmed — the edit
+    could change what they're agreeing to.
+
+6. Notifications
+
+-   Instant, per-item push notifications — a buyer marking ten items
+    purchased after a big Costco run means ten pings, and that's an
+    accepted tradeoff for immediacy over batching.
+
+-   A per-group mute toggle for anyone who finds a specific group's
+    notifications overwhelming.
+
+-   A single global mute toggle for someone who wants quiet by default
+    and opts into notifications for specific groups instead.
+
+7. Accessibility
+
+A meaningful part of the value here is for elderly users living alone or
+with limited mobility, who depend on a neighbor or family member to shop
+for them. Accessibility is designed in from the start:
+
+-   Large, generous tap targets.
+
+-   A large-text display mode.
+
+-   Minimal navigation depth — few taps between opening the app and
+    adding or checking an item.
+
+8. Identity, Privacy & Sign-In
+
+-   Sign-in is phone-number based; the phone number is the single
+    account identity across the app.
+
+-   Other group members only ever see display names — phone numbers are
+    never exposed to other members and are used solely for
+    authentication and invite delivery.
+
+-   Because identity is phone-based, reinstalling or switching devices
+    is just a matter of re-authenticating by phone; the backend
+    re-attaches the existing account and its group memberships.
+
+9. Monetization
+
+Free tier: Up to 3 groups. The solo group created at signup is a real
+group and counts as one of the three from the moment the account is
+created, even before any friends are added.
+
+Paid tier: $5 every 3 months unlocks unlimited additional groups for
+that period.
+
+Downgrade handling: If a paid subscription lapses while the user belongs
+to more than 3 groups, every one of their groups becomes read-only and a
+required selection screen prompts them to choose exactly 3 to keep; the
+screen re-appears on every app open until resolved. Once they confirm,
+the kept 3 return to full read-write, and only the excess groups remain
+read-only (not deleted) — restored in full if the user resubscribes.
+
+Subscription billing implementation
+
+Handled via RevenueCat (or bare StoreKit/Play Billing) managing a
+$5/3-month auto-renewing subscription product on both the App Store and
+Play Store. RevenueCat handles receipt validation, renewal,
+cancellation, and cross-device restore. Because login is
+phone-number-based rather than email/password, the backend needs to link
+each store receipt to the phone-number account so entitlement follows
+the user across devices and reinstalls.
+
+-   Billing grace period: both stores offer a retry window before a
+    lapsed card cancels entitlement (roughly 16–21 days on Apple,
+    similar on Google). This should be turned on — the user base skews
+    elderly, and a stale expired card shouldn't silently trigger the
+    “choose 3 groups” downgrade flow.
+
+-   Refunds: the store processes the refund itself; RevenueCat's refund
+    webhook should flip the account's paid status to false and
+    re-trigger the downgrade-to-3 flow, same as a normal cancellation.
+
+-   Device/reinstall continuity: since identity is phone-based, a
+    reinstall or new device re-authenticates by phone first, the backend
+    re-establishes the same internal user ID, and RevenueCat's
+    restore-purchases call re-attaches the subscription to that ID
+    automatically — no manual “restore purchase” button should be
+    necessary.
+
+-   Apple Family Sharing: allowed. Entitlement is per phone number
+    rather than per household, so enabling it costs nothing and is a
+    reasonable nice-to-have.
+
+-   Implementation specifics: Two RevenueCat products are defined, one
+    per store, both mapped to a single RevenueCat entitlement (e.g.
+    cartpool_unlimited). At login, RevenueCat's app_user_id is set to
+    the backend's internal user ID (keyed off phone number), so client
+    state and server state share one identity with no separate mapping
+    table. The backend subscribes to RevenueCat's webhook
+    (INITIAL_PURCHASE, RENEWAL, CANCELLATION, EXPIRATION, BILLING_ISSUE,
+    REFUND), verifies the webhook signature, and writes entitlement
+    status onto that user record. As a fallback for a missed webhook,
+    the client also calls RevenueCat's REST API to re-sync entitlement
+    on app foreground.
+
+10. Explicitly Out of Scope (v1)
+
+-   In-app payments, IOUs, or running balances of any kind — only the
+    non-financial “what I bought for others” history.
+
+-   In-app messaging or chat — item-specific questions (“what kind of
+    bell pepper?”) happen on whatever texting app the two people already
+    use.
+
+-   Quantity math on bulk items — opt-in is binary plus a free-text
+    note, nothing more structured.
+
+-   Sorting or tagging items by store section or aisle (produce, dairy,
+    household, etc.).
+
+-   Any ability to remove or kick another member from a group.
+
+-   An in-app resolution path for a lost or never-handed-off purchased
+    item (buyer marks it purchased, recipient never actually gets it).
+    This is treated as a real-world dispute to be handled over text, not
+    an app bug to fix later.
+
+11. Data Retention
+
+-   Removed items and expired invites are purged after 2 weeks.
+
+-   Grace-period purchased items from a departed member are removed 2
+    days after departure unless a shorter rule above applies.
+
+12. Phase 2 / Future Ideas
+
+Surplus broadcasts
+
+A feature to post “I've got extra broccoli, anyone interested?” to a
+group. This is deliberately scoped as its own lightweight post type
+rather than folded into the item model, since it behaves differently
+from a normal list item: there's no single adder, it's group-wide
+visible, and it needs a claim/close mechanic plus an expiration or
+manual close. Worth designing properly in a later phase.
+
+-   Claim flow: Interested group members tap to express interest; the
+    poster reviews and manually chooses who gets the surplus item,
+    rather than first-come-first-served. This lets the poster split a
+    surplus among multiple people or account for who actually needs it.
+
+-   Closing: Only the poster can close a broadcast — consistent with the
+    item model, where only the adder can edit or remove. They close it
+    once it's been handed off, or to cancel it.
+
+-   Auto-expiry: If the poster hasn't closed it, the post auto-expires
+    48 hours after posting and drops out of the group's active view.
+
+Usage analytics
+
+Anonymous tracking of which features are most and least used, to guide
+future prioritization. Not part of the initial build.
+
+-   Privacy posture: Aggregated event counts only — no per-user or
+    per-device identifier of any kind. The data can answer “how many
+    times was feature X used this week” but never “what did user Y do,”
+    which rules out funnel or retention analysis by design in exchange
+    for the data being structurally non-reidentifiable.
