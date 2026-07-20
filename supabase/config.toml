@@ -1,0 +1,23 @@
+# Supabase CLI project config (minimal). `supabase start` runs a local stack;
+# the test suite only needs the Postgres it exposes on 54322.
+project_id = "cartpool"
+
+[api]
+enabled = true
+port = 54321
+# `api` is the client-facing RPC surface (0004_auth.sql) and is listed first so
+# unqualified RPC names resolve there; `public` stays exposed for RLS-guarded
+# table reads and Realtime subscriptions.
+schemas = ["api", "public"]
+extra_search_path = ["public"]
+
+[db]
+port = 54322
+major_version = 15
+
+[auth]
+enable_signup = true
+
+[auth.sms]
+enable_signup = true
+enable_confirmations = true
