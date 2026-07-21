@@ -1,0 +1,18 @@
+<!--
+  Local-dev email for signInWithOtp({ email }).
+
+  Supabase's stock template sends a magic *link* whose redirect_to points at a
+  web app (127.0.0.1:3000) that this project doesn't have — there is no web
+  Cartpool, only the phone app. The app calls verifyOtp({ type: "email" }),
+  which wants the 6-digit code, so this template prints {{ .Token }} instead.
+
+  Wired up by [auth.email.template.magic_link] in supabase/config.toml.
+  Local only; production identity is phone (spec §8).
+-->
+<h2>Your Cartpool sign-in code</h2>
+
+<p style="font-size: 32px; font-weight: bold; letter-spacing: 4px;">
+  {{ .Token }}
+</p>
+
+<p>Enter this code in the app. It expires shortly and can only be used once.</p>

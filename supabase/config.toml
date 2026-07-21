@@ -21,3 +21,10 @@ enable_signup = true
 [auth.sms]
 enable_signup = true
 enable_confirmations = true
+
+# Local dev email sign-in (DEV_EMAIL_AUTH in app/src/config.ts). The stock
+# template sends a magic link pointing at a web app this project doesn't have;
+# the app verifies a 6-digit OTP instead, so the template prints the token.
+[auth.email.template.magic_link]
+subject = "Your Cartpool sign-in code"
+content_path = "./supabase/templates/magic_link.html"

@@ -111,6 +111,12 @@ has a small link at the bottom that cycles **phone → password → email**.
    catches every outbound local email.
 4. Read the 6-digit code from the message, type it into the app.
 
+If the email shows a **"Sign in" link instead of a code**, the custom template
+isn't loaded — restart the stack (`supabase stop` then `supabase start`), since
+`config.toml` is only read at startup. Don't click the link: it redirects to a
+web app this project doesn't have, so it will fail with
+`ERR_CONNECTION_REFUSED`.
+
 **Password (fastest for repeat sign-ins):**
 
 1. On the PC, open Studio at <http://127.0.0.1:54323>.
