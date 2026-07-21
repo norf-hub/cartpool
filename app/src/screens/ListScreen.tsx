@@ -1,10 +1,11 @@
 // The merged list (spec §2): every group's items in one screen, sections per
 // group with a color tag. Core-loop actions only — add, mark purchased
 // (1 tap, no dialog), unmark (buyer only), edit/remove (adder only).
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   SectionList,
@@ -13,6 +14,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { parseInviteUrl } from "@/lib/links";
 import { useAuth } from "@/hooks/useAuth";
 import { useCartpool, type Item } from "@/hooks/useCartpool";
 import ShareScreen from "@/screens/ShareScreen";
@@ -20,6 +22,11 @@ import { base, colors, groupPalette } from "@/theme";
 import { LARGE_TEXT_SCALE, MAX_OS_FONT_SCALE } from "@/theme/accessibility";
 
 type Section = { groupId: string; color: string; title: string; data: Item[] };
+
+// getInitialURL keeps returning the launch URL for the whole app run, so a
+// remount (sign out and back in) would re-open the share view with a stale
+// code. Module-level because the consumption must outlive the component.
+let consumedInitialUrl: string | null = null;
 
 export default function ListScreen({ userId }: { userId: string }) {
   const { signOut } = useAuth();
@@ -29,6 +36,30 @@ export default function ListScreen({ userId }: { userId: string }) {
   const [targetGroup, setTargetGroup] = useState<string | null>(null);
   const [editing, setEditing] = useState<Item | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [pendingCode, setPendingCode] = useState<string | null>(null);
+
+  // Invite deep links land here: prefill the join field and open the share
+  // view. Never auto-redeem — the user must actively accept (spec §3).
+  // getInitialURL covers cold start via link (including a link tapped before
+  // sign-in, since this mounts right after auth); the listener covers links
+  // tapped while the app is running.
+  useEffect(() => {
+    const handle = (url: string | null) => {
+      const c = parseInviteUrl(url);
+      if (c) {
+        setPendingCode(c);
+        setSharing(true);
+      }
+    };
+    Linking.getInitialURL().then((url) => {
+      if (url && url !== consumedInitialUrl) {
+        consumedInitialUrl = url;
+        handle(url);
+      }
+    });
+    const sub = Linking.addEventListener("url", (e) => handle(e.url));
+    return () => sub.remove();
+  }, []);
 
   // In-app large-text toggle: fixed scale on text AND row height together
   // (addendum §4.1). OS font scaling stacks on top, capped at 2.0.
@@ -135,13 +166,20 @@ export default function ListScreen({ userId }: { userId: string }) {
   if (sharing) {
     return (
       <ShareScreen
+        // Remount when a new link arrives so a fresh code replaces a stale one
+        // even if the share view is already open.
+        key={pendingCode ?? "share"}
         groups={cp.groups}
         groupTitle={groupTitle}
         memberCount={(id) => cp.groups.find((g) => g.id === id)?.memberIds.length ?? 0}
         scale={s}
+        initialCode={pendingCode ?? undefined}
         onCreateInvite={cp.createInvite}
         onRedeem={cp.redeemInvite}
-        onClose={() => setSharing(false)}
+        onClose={() => {
+          setSharing(false);
+          setPendingCode(null);
+        }}
       />
     );
   }

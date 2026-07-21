@@ -33,6 +33,7 @@ export default function ShareScreen({
   groupTitle,
   memberCount,
   scale: s,
+  initialCode,
   onCreateInvite,
   onRedeem,
   onClose,
@@ -41,6 +42,11 @@ export default function ShareScreen({
   groupTitle: (groupId: string) => string;
   memberCount: (groupId: string) => number;
   scale: number;
+  /**
+   * Code arriving via deep link. It only prefills the field — the user still
+   * taps Join, because invites are never accepted automatically (spec §3).
+   */
+  initialCode?: string;
   onCreateInvite: (groupId: string) => Promise<RpcResult<{ code: string; link: string }>>;
   onRedeem: (
     code: string
@@ -48,7 +54,7 @@ export default function ShareScreen({
   onClose: () => void;
 }) {
   const [busyGroup, setBusyGroup] = useState<string | null>(null);
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(initialCode ?? "");
   const [joining, setJoining] = useState(false);
 
   const invite = async (groupId: string) => {

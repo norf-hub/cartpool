@@ -18,3 +18,13 @@
 6. **GitHub** — repo + branch protection; CI already in `.github/workflows`.
    After the first `npm install`, commit `package-lock.json` and switch CI to
    `npm ci`.
+7. **cartpool.app domain** — register it and serve the two association files
+   that make invite links (`https://cartpool.app/i/{code}`) open the app:
+   `/.well-known/apple-app-site-association` (appID
+   `<TEAM_ID>.app.cartpool`, paths `/i/*`; needs the Apple team ID from
+   step 1) and `/.well-known/assetlinks.json` (package `app.cartpool` +
+   the release signing cert's SHA-256 from EAS, step 4). Both must be served
+   as JSON over HTTPS with no redirect. Until then the `cartpool://i/{code}`
+   scheme works for dev testing, and the code-entry field is the fallback on
+   any device. `/i/{code}` should also render a small web page ("get the
+   app") for people without it installed.
