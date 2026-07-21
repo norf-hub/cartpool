@@ -17,6 +17,7 @@ import {
 import { parseInviteUrl } from "@/lib/links";
 import { useAuth } from "@/hooks/useAuth";
 import { useCartpool, type BulkOptIn, type Item } from "@/hooks/useCartpool";
+import GroupsScreen from "@/screens/GroupsScreen";
 import ShareScreen from "@/screens/ShareScreen";
 import { base, colors, groupPalette } from "@/theme";
 import { LARGE_TEXT_SCALE, MAX_OS_FONT_SCALE } from "@/theme/accessibility";
@@ -36,6 +37,7 @@ export default function ListScreen({ userId }: { userId: string }) {
   const [targetGroup, setTargetGroup] = useState<string | null>(null);
   const [editing, setEditing] = useState<Item | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [managing, setManaging] = useState(false);
   const [pendingCode, setPendingCode] = useState<string | null>(null);
 
   // Invite deep links land here: prefill the join field and open the share
@@ -214,7 +216,23 @@ export default function ListScreen({ userId }: { userId: string }) {
   };
 
   // No navigator in the app yet (spec's depth budget is shallow enough that
-  // one swap is cheaper than a dependency), so share is a full-screen swap.
+  // one swap is cheaper than a dependency), so share and manage are
+  // full-screen swaps.
+  if (managing) {
+    return (
+      <GroupsScreen
+        groups={cp.groups}
+        userId={userId}
+        groupTitle={groupTitle}
+        nameOf={cp.nameOf}
+        scale={s}
+        onLeave={cp.leaveGroup}
+        onBlock={cp.blockUser}
+        onClose={() => setManaging(false)}
+      />
+    );
+  }
+
   if (sharing) {
     return (
       <ShareScreen
@@ -247,6 +265,23 @@ export default function ListScreen({ userId }: { userId: string }) {
           Cartpool
         </Text>
         <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => setManaging(true)}
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel="Manage your lists and members"
+          >
+            <Text
+              style={{
+                color: colors.textSecondary,
+                fontSize: base.fontSizeSmall * s,
+                fontWeight: "600",
+              }}
+              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+            >
+              Lists
+            </Text>
+          </Pressable>
           <Pressable
             onPress={() => setSharing(true)}
             style={styles.headerButton}
@@ -390,7 +425,12 @@ export default function ListScreen({ userId }: { userId: string }) {
         keyExtractor={(item) => item.id}
         stickySectionHeadersEnabled={false}
         renderSectionHeader={({ section }) => (
-          <View style={styles.sectionHeader}>
+          <Pressable
+            onPress={() => setManaging(true)}
+            style={[styles.sectionHeader, { minHeight: base.tapTarget * s }]}
+            accessibilityRole="button"
+            accessibilityLabel={`${section.title}. Tap to manage lists and members.`}
+          >
             <View style={[styles.colorDot, { backgroundColor: section.color }]} />
             <Text
               style={[styles.sectionTitle, { fontSize: base.fontSizeSmall * s }]}
@@ -398,7 +438,7 @@ export default function ListScreen({ userId }: { userId: string }) {
             >
               {section.title}
             </Text>
-          </View>
+          </Pressable>
         )}
         renderItem={({ item, section }) => (
           <Row

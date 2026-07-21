@@ -233,6 +233,14 @@ export function useCartpool(userId: string | null) {
       act(() => rpc.bulkAssign(itemId, targetUserId)),
     /** Re-agree to a bulk item whose text changed after my pre-commit. */
     bulkReconfirm: (itemId: string) => act(() => rpc.bulkReconfirm(itemId)),
+    /** Leave a list: open items vanish, purchased get 2-day grace (spec §3). */
+    leaveGroup: (groupId: string) => act(() => rpc.leaveGroup(groupId)),
+    /**
+     * Block someone. Server-side this makes ME leave every shared group; the
+     * other person is untouched, unnotified, and the block itself is
+     * unreadable by any client (spec §3).
+     */
+    blockUser: (targetUserId: string) => act(() => rpc.blockUser(targetUserId)),
     /** Mint a 7-day invite code for a group the user belongs to (spec §3). */
     createInvite: (groupId: string) => rpc.createInvite(groupId, "link"),
     /**
