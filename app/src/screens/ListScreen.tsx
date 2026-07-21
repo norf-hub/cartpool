@@ -17,6 +17,7 @@ import {
 import { parseInviteUrl } from "@/lib/links";
 import { useAuth } from "@/hooks/useAuth";
 import { useCartpool, type BulkOptIn, type Item } from "@/hooks/useCartpool";
+import ChooseGroupsScreen from "@/screens/ChooseGroupsScreen";
 import GroupsScreen from "@/screens/GroupsScreen";
 import ShareScreen from "@/screens/ShareScreen";
 import { base, colors, groupPalette } from "@/theme";
@@ -95,10 +96,13 @@ export default function ListScreen({ userId }: { userId: string }) {
     [cp.groups, cp.items, cp.names]
   );
 
+  // New items can only target writable groups; read-only ones stay visible
+  // in the list but leave the picker (the server would reject the add anyway).
+  const writableGroups = cp.groups.filter((g) => !cp.isGroupReadOnly(g.id));
   const activeGroup =
-    targetGroup && cp.groups.some((g) => g.id === targetGroup)
+    targetGroup && writableGroups.some((g) => g.id === targetGroup)
       ? targetGroup
-      : cp.groups[0]?.id ?? null;
+      : writableGroups[0]?.id ?? null;
 
   const submitDraft = async () => {
     const text = draft.trim();
@@ -214,6 +218,31 @@ export default function ListScreen({ userId }: { userId: string }) {
     actions.push({ text: "Cancel", style: "cancel" });
     Alert.alert(item.text, undefined, actions);
   };
+
+  // The downgrade gate outranks every other view (spec §9): while frozen,
+  // the account is read-only everywhere and this screen is unescapable —
+  // it comes back on every refresh until choose_kept_groups succeeds or a
+  // resubscription clears the flag server-side.
+  // >= 3 not > 3: leaving groups while frozen can shrink the count to
+  // exactly 3, and picking all 3 is then the way out of the freeze.
+  if (cp.frozen && cp.groups.length >= 3) {
+    return (
+      <ChooseGroupsScreen
+        groups={cp.groups}
+        groupTitle={groupTitle}
+        scale={s}
+        onConfirm={cp.chooseKeptGroups}
+        onResubscribe={() =>
+          // Paywall lands with RevenueCat config (INFRA §5); react-native-
+          // purchases is already a dependency, so this is wiring, not surgery.
+          Alert.alert(
+            "Not available yet",
+            "Resubscribing isn't wired up in this build. Pick 3 lists for now — the others come back in full when you resubscribe later."
+          )
+        }
+      />
+    );
+  }
 
   // No navigator in the app yet (spec's depth budget is shallow enough that
   // one swap is cheaper than a dependency), so share and manage are
@@ -392,9 +421,9 @@ export default function ListScreen({ userId }: { userId: string }) {
       </View>
 
       {/* Which group new items go to — only shown when there's a choice. */}
-      {cp.groups.length > 1 && !editing && (
+      {writableGroups.length > 1 && !editing && (
         <View style={styles.groupPicker}>
-          {cp.groups.map((g) => (
+          {writableGroups.map((g) => (
             <Pressable
               key={g.id}
               onPress={() => setTargetGroup(g.id)}
@@ -437,6 +466,7 @@ export default function ListScreen({ userId }: { userId: string }) {
               maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
             >
               {section.title}
+              {cp.isGroupReadOnly(section.groupId) ? "  ·  READ-ONLY" : ""}
             </Text>
           </Pressable>
         )}

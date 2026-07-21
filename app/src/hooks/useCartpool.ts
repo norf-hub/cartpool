@@ -23,6 +23,19 @@ export type Item = {
   created_at: string;
 };
 
+/**
+ * My subscription row (spec §9). Absent row = free tier, nothing frozen.
+ * frozen_read_only: entitlement lapsed with >3 groups; read-only EVERYWHERE
+ * until choose_kept_groups succeeds. After that, kept_group_ids is set and
+ * only groups outside it stay read-only (until resubscribe clears it).
+ */
+export type Subscription = {
+  entitlement_active: boolean;
+  in_grace_period: boolean;
+  frozen_read_only: boolean;
+  kept_group_ids: string[] | null;
+};
+
 /** One member's share of a bulk item (spec §5): binary in, no quantity. */
 export type BulkOptIn = {
   item_id: string;
@@ -64,6 +77,7 @@ export function useCartpool(userId: string | null) {
   const [names, setNames] = useState<Record<string, string>>({});
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
   const [optIns, setOptIns] = useState<Record<string, BulkOptIn[]>>({});
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -79,6 +93,17 @@ export function useCartpool(userId: string | null) {
         .is("left_at", null);
       if (e1) throw e1;
       const groupIds = (mine ?? []).map((m) => m.group_id as string).sort();
+
+      // My subscription row (RLS-scoped to self). The freeze check must run
+      // on every refresh: the spec wants the pick-3 screen back on every app
+      // open until resolved, and the flag flips server-side via webhook.
+      const { data: sub, error: eS } = await pub()
+        .from("subscriptions")
+        .select("entitlement_active, in_grace_period, frozen_read_only, kept_group_ids")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (eS) throw eS;
+      setSubscription((sub as Subscription) ?? null);
 
       // Pending joins are for groups the user is NOT in, so this can't be
       // scoped by groupIds and must run even when they have no groups.
@@ -215,6 +240,23 @@ export function useCartpool(userId: string | null) {
     names,
     waitlist,
     optIns,
+    subscription,
+    /** Read-only everywhere: lapsed with >3 groups, keepers not yet chosen. */
+    frozen: subscription?.frozen_read_only ?? false,
+    /**
+     * Per-group read-only after the pick: outside the kept 3 while
+     * unentitled. Mirrors can_write() server-side — the server still
+     * enforces; this is for honest UI.
+     */
+    isGroupReadOnly: (groupId: string) => {
+      if (!subscription) return false;
+      if (subscription.frozen_read_only) return true;
+      return (
+        !subscription.entitlement_active &&
+        subscription.kept_group_ids !== null &&
+        !subscription.kept_group_ids.includes(groupId)
+      );
+    },
     loading,
     error,
     refresh,
@@ -233,6 +275,8 @@ export function useCartpool(userId: string | null) {
       act(() => rpc.bulkAssign(itemId, targetUserId)),
     /** Re-agree to a bulk item whose text changed after my pre-commit. */
     bulkReconfirm: (itemId: string) => act(() => rpc.bulkReconfirm(itemId)),
+    /** The required downgrade pick: exactly 3 group ids (spec §9). */
+    chooseKeptGroups: (groupIds: string[]) => act(() => rpc.chooseKeptGroups(groupIds)),
     /** Leave a list: open items vanish, purchased get 2-day grace (spec §3). */
     leaveGroup: (groupId: string) => act(() => rpc.leaveGroup(groupId)),
     /**
