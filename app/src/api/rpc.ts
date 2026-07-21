@@ -71,6 +71,13 @@ export const addItem = (groupId: string, text: string, isBulk = false, note?: st
   });
 export const editItemText = (itemId: string, text: string) =>
   call("edit_item_text", { p_item: itemId, p_text: text });
+/** Convert an existing item to/from bulk, or edit its note (0010). */
+export const setItemBulk = (itemId: string, isBulk: boolean, note?: string) =>
+  call("set_item_bulk", {
+    p_item: itemId,
+    p_is_bulk: isBulk,
+    p_bulk_note: note ?? null,
+  });
 export const removeItem = (itemId: string) => call("remove_item", { p_item: itemId });
 export const bulkOptIn = (itemId: string) => call("bulk_opt_in", { p_item: itemId });
 export const bulkAssign = (itemId: string, targetUserId: string) =>

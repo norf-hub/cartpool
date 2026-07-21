@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import { rpc, q } from "./helpers/db";
 import { mkUser, mkGroupWith, addItem, item } from "./helpers/fixtures";
 
+
 type R = { ok: boolean; error?: string };
 
 const optIn = async (itemId: string, u: string) =>
@@ -74,5 +75,103 @@ describe("bulk opt-ins", () => {
       ok: false,
       error: "not_adder",
     });
+  });
+});
+
+// 0010 — converting an existing item to/from bulk, and editing the note.
+describe("set_item_bulk", () => {
+  it("converts a plain item to bulk, with a note", async () => {
+    const a = await mkUser("a");
+    const g = await mkGroupWith([a]);
+    const it1 = await addItem(g, a, "seltzer");
+    expect(await item(it1)).toMatchObject({ is_bulk: false, bulk_note: null });
+
+    expect(await rpc<R>("set_item_bulk", [it1, a, true, "lime, not lemon"])).toMatchObject({
+      ok: true,
+    });
+    expect(await item(it1)).toMatchObject({
+      is_bulk: true,
+      bulk_note: "lime, not lemon",
+    });
+  });
+
+  it("converts back to plain and drops the note while no one has opted in", async () => {
+    const a = await mkUser("a");
+    const g = await mkGroupWith([a]);
+    const it1 = await addItem(g, a, "flour", { isBulk: true, note: "wholemeal" });
+
+    expect(await rpc<R>("set_item_bulk", [it1, a, false])).toMatchObject({ ok: true });
+    expect(await item(it1)).toMatchObject({ is_bulk: false, bulk_note: null });
+  });
+
+  it("refuses to un-bulk once someone has opted in", async () => {
+    const [a, b] = [await mkUser("a"), await mkUser("b")];
+    const g = await mkGroupWith([a, b]);
+    const it1 = await addItem(g, a, "24-pack", { isBulk: true });
+    await rpc("bulk_opt_in", [it1, b]);
+
+    // Orphaned opt-in rows would survive invisibly and resurrect on re-bulk.
+    expect(await rpc<R>("set_item_bulk", [it1, a, false])).toMatchObject({
+      ok: false,
+      error: "has_opt_ins",
+    });
+    expect(await item(it1)).toMatchObject({ is_bulk: true });
+
+    // Editing the note is still fine while opted in.
+    expect(await rpc<R>("set_item_bulk", [it1, a, true, "the big one"])).toMatchObject({
+      ok: true,
+    });
+    expect(await item(it1)).toMatchObject({ bulk_note: "the big one" });
+  });
+
+  it("editing the note does not trigger reconfirmation (only text edits do)", async () => {
+    const [a, b] = [await mkUser("a"), await mkUser("b")];
+    const g = await mkGroupWith([a, b]);
+    const it1 = await addItem(g, a, "case of oat milk", { isBulk: true });
+    await rpc("bulk_opt_in", [it1, b]);
+
+    await rpc("set_item_bulk", [it1, a, true, "barista edition"]);
+    const optIn = (
+      await q(`select * from bulk_opt_ins where item_id=$1 and user_id=$2`, [it1, b])
+    ).rows[0];
+    expect(optIn.needs_reconfirmation).toBe(false);
+    expect((await item(it1)).bulk_needs_reconfirm).toBe(false);
+  });
+
+  it("only the adder can change bulk status", async () => {
+    const [a, b] = [await mkUser("a"), await mkUser("b")];
+    const g = await mkGroupWith([a, b]);
+    const it1 = await addItem(g, a, "rice");
+    expect(await rpc<R>("set_item_bulk", [it1, b, true])).toMatchObject({
+      ok: false,
+      error: "not_adder",
+    });
+  });
+
+  it("is blocked in a read-only group", async () => {
+    const a = await mkUser("a");
+    const g = await mkGroupWith([a]);
+    const it1 = await addItem(g, a, "rice");
+    await q(`update subscriptions set frozen_read_only = true where user_id = $1`, [a]);
+
+    expect(await rpc<R>("set_item_bulk", [it1, a, true])).toMatchObject({
+      ok: false,
+      error: "read_only",
+    });
+  });
+
+  it("refuses removed and unknown items", async () => {
+    const a = await mkUser("a");
+    const g = await mkGroupWith([a]);
+    const it1 = await addItem(g, a, "rice");
+    await rpc("remove_item", [it1, a]);
+
+    expect(await rpc<R>("set_item_bulk", [it1, a, true])).toMatchObject({
+      ok: false,
+      error: "not_found",
+    });
+    expect(
+      await rpc<R>("set_item_bulk", ["00000000-0000-0000-0000-000000000000", a, true])
+    ).toMatchObject({ ok: false, error: "not_found" });
   });
 });

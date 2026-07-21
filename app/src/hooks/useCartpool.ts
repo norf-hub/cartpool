@@ -268,6 +268,9 @@ export function useCartpool(userId: string | null) {
     unmarkPurchased: (itemId: string) => act(() => rpc.unmarkPurchased(itemId)),
     removeItem: (itemId: string) => act(() => rpc.removeItem(itemId)),
     editItemText: (itemId: string, text: string) => act(() => rpc.editItemText(itemId, text)),
+    /** Convert an existing item to/from bulk, or edit its note (spec §5). */
+    setItemBulk: (itemId: string, isBulk: boolean, note?: string) =>
+      act(() => rpc.setItemBulk(itemId, isBulk, note)),
     /** One-tap bulk share (spec §5). Pre-commit if open, self-serve if bought. */
     bulkOptIn: (itemId: string) => act(() => rpc.bulkOptIn(itemId)),
     /** Buyer adds someone to an already-purchased bulk item. */

@@ -35,8 +35,13 @@ export default function ListScreen({ userId }: { userId: string }) {
   const cp = useCartpool(userId);
   const [draft, setDraft] = useState("");
   const [draftBulk, setDraftBulk] = useState(false);
+  const [draftNote, setDraftNote] = useState("");
   const [targetGroup, setTargetGroup] = useState<string | null>(null);
   const [editing, setEditing] = useState<Item | null>(null);
+  // Note editing reuses the inline note input rather than a dialog:
+  // Alert.prompt is iOS-only, and a second modal path would drift from the
+  // add-bar behaviour.
+  const [noteEditing, setNoteEditing] = useState<Item | null>(null);
   const [sharing, setSharing] = useState(false);
   const [managing, setManaging] = useState(false);
   const [pendingCode, setPendingCode] = useState<string | null>(null);
@@ -113,11 +118,13 @@ export default function ListScreen({ userId }: { userId: string }) {
       setEditing(null);
     } else {
       if (!activeGroup) return;
-      const res = await cp.addItem(activeGroup, text, draftBulk);
+      const note = draftBulk ? draftNote.trim() || undefined : undefined;
+      const res = await cp.addItem(activeGroup, text, draftBulk, note);
       if (!res.ok) Alert.alert("Couldn't add item", friendlyError(res.error));
     }
     setDraft("");
     setDraftBulk(false);
+    setDraftNote("");
   };
 
   const onRowTap = async (item: Item) => {
@@ -143,6 +150,19 @@ export default function ListScreen({ userId }: { userId: string }) {
         `${cp.nameOf(item.purchased_by)} bought this${when(item.purchased_at)}. Only the buyer can unmark it.`
       );
     }
+  };
+
+  const promptNote = (item: Item) => {
+    setNoteEditing(item);
+    setDraftNote(item.bulk_note ?? "");
+  };
+
+  const saveNote = async () => {
+    if (!noteEditing) return;
+    const res = await cp.setItemBulk(noteEditing.id, true, draftNote.trim() || undefined);
+    if (!res.ok) Alert.alert("Couldn't save the note", friendlyError(res.error));
+    setNoteEditing(null);
+    setDraftNote("");
   };
 
   // One-tap opt-in / reconfirm on the bulk chip (spec §5). No opt-out exists
@@ -181,6 +201,28 @@ export default function ListScreen({ userId }: { userId: string }) {
           setDraft(item.text);
         },
       });
+      // Bulk is settable after the fact (0010), not just at add time.
+      if (!item.is_bulk) {
+        actions.push({
+          text: "Make this a bulk item",
+          onPress: async () => {
+            const res = await cp.setItemBulk(item.id, true);
+            if (!res.ok) Alert.alert("Couldn't change it", friendlyError(res.error));
+          },
+        });
+      } else {
+        actions.push({
+          text: item.bulk_note ? "Edit bulk note" : "Add a bulk note",
+          onPress: () => promptNote(item),
+        });
+        actions.push({
+          text: "Make this a regular item",
+          onPress: async () => {
+            const res = await cp.setItemBulk(item.id, false);
+            if (!res.ok) Alert.alert("Couldn't change it", friendlyError(res.error));
+          },
+        });
+      }
       actions.push({
         text: "Remove",
         style: "destructive",
@@ -419,6 +461,74 @@ export default function ListScreen({ userId }: { userId: string }) {
           </Pressable>
         )}
       </View>
+
+      {/* Bulk note (spec §5): no structured quantity field by design, so this
+          free text carries "the unsalted kind". Only while Bulk is on. */}
+      {(noteEditing || (draftBulk && !editing)) && (
+        <View style={styles.noteRow}>
+          {noteEditing && (
+            <Text
+              style={{ color: colors.textSecondary, fontSize: base.fontSizeSmall * s }}
+              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+            >
+              Note for “{noteEditing.text}”
+            </Text>
+          )}
+          <View style={styles.noteInputRow}>
+            <TextInput
+              style={[
+                styles.noteInput,
+                { fontSize: base.fontSize * s, minHeight: base.tapTarget * s },
+              ]}
+              placeholder="Note (optional) — e.g. the unsalted kind"
+              placeholderTextColor={colors.textSecondary}
+              value={draftNote}
+              onChangeText={setDraftNote}
+              onSubmitEditing={noteEditing ? saveNote : submitDraft}
+              returnKeyType="done"
+              autoFocus={!!noteEditing}
+              accessibilityLabel="Bulk item note, optional"
+            />
+            {noteEditing && (
+              <>
+                <Pressable
+                  onPress={saveNote}
+                  style={[styles.bulkChip, { minHeight: base.tapTarget * s }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Save note"
+                >
+                  <Text
+                    style={{
+                      color: colors.accent,
+                      fontSize: base.fontSizeSmall * s,
+                      fontWeight: "700",
+                    }}
+                    maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+                  >
+                    Save
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setNoteEditing(null);
+                    setDraftNote("");
+                  }}
+                  style={[styles.bulkChip, { minHeight: base.tapTarget * s }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel"
+                >
+                  <Text
+                    style={{ color: colors.textSecondary, fontSize: base.fontSizeSmall * s }}
+                    maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+                  >
+                    Cancel
+                  </Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* Which group new items go to — only shown when there's a choice. */}
       {writableGroups.length > 1 && !editing && (
@@ -696,6 +806,8 @@ function friendlyError(code: string): string {
       return "They're not in this list anymore.";
     case "nothing_to_reconfirm":
       return "Nothing to reconfirm — you're all set.";
+    case "has_opt_ins":
+      return "People have already opted in, so this has to stay a bulk item.";
     default:
       return `Something went wrong (${code}).`;
   }
@@ -752,6 +864,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: base.spacing,
     alignItems: "center",
     justifyContent: "center",
+  },
+  noteRow: {
+    paddingHorizontal: base.spacing,
+    paddingBottom: base.spacing / 2,
+    gap: 4,
+  },
+  noteInputRow: { flexDirection: "row", gap: base.spacing / 2 },
+  noteInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: base.radius,
+    paddingHorizontal: base.spacing,
+    color: colors.text,
+    backgroundColor: colors.surface,
   },
   groupPicker: {
     flexDirection: "row",
