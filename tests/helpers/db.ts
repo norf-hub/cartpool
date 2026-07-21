@@ -5,8 +5,14 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+// Default target is a DEDICATED database on the local Supabase Postgres, not
+// the `postgres` database the app itself uses. migrate() drops and rebuilds
+// the public schema, so pointing it at the app's database wipes all app data
+// — discovered the hard way, mid walkthrough on a device. globalSetup creates
+// cartpool_test if it doesn't exist. CI overrides via DATABASE_URL and still
+// uses its throwaway container's `postgres` database directly.
 export const DATABASE_URL =
-  process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:54322/postgres";
+  process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:54322/cartpool_test";
 
 export const pool = new Pool({ connectionString: DATABASE_URL, max: 10 });
 

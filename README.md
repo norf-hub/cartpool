@@ -51,7 +51,8 @@ single root `package-lock.json` that CI's `npm ci` expects.
 ```bash
 npm install
 
-# Option A: local Supabase stack (Postgres on 54322)
+# Option A: local Supabase stack. Tests use their own cartpool_test database
+# (created automatically) so they never touch the app's data on the same stack.
 supabase start && npm test
 
 # Option B: any Postgres

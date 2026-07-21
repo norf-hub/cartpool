@@ -117,7 +117,16 @@ export default function ListScreen({ userId }: { userId: string }) {
       if (!res.ok) Alert.alert("Couldn't save", friendlyError(res.error));
       setEditing(null);
     } else {
-      if (!activeGroup) return;
+      if (!activeGroup) {
+        // No writable group. Legitimate only mid-provisioning or when frozen;
+        // otherwise something is wrong (e.g. the account's data is gone) and
+        // silence would leave the user tapping at a dead button.
+        Alert.alert(
+          "No list to add to",
+          "Your account doesn't seem to have a list right now. Try signing out and back in; if that doesn't fix it, the server data may have been reset."
+        );
+        return;
+      }
       const note = draftBulk ? draftNote.trim() || undefined : undefined;
       const res = await cp.addItem(activeGroup, text, draftBulk, note);
       if (!res.ok) Alert.alert("Couldn't add item", friendlyError(res.error));
