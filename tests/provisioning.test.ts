@@ -1,5 +1,11 @@
 // 0006 — signup provisioning trigger + push token registration.
 // The auth.users shim in 0006 lets the real trigger path run on bare Postgres.
+//
+// These inserts supply auth.users.id explicitly. The 0006 shim defaults it,
+// but Supabase's real gotrue-owned auth.users does not (gotrue always
+// supplies the id), so an id-less insert passes on bare Postgres and fails
+// against a local Supabase stack. Passing it keeps the suite honest on both,
+// and mirrors what gotrue does at signup.
 import { describe, it, expect } from "vitest";
 import { rpc, q } from "./helpers/db";
 import { mkUser, activeGroups, subscription } from "./helpers/fixtures";
@@ -11,8 +17,8 @@ describe("signup provisioning (auth.users trigger)", () => {
   it("an auth signup provisions users row (same id), subscription, and solo group", async () => {
     const p = phone();
     const { rows } = await q(
-      `insert into auth.users (phone, raw_user_meta_data)
-       values ($1, '{"display_name":"Norf"}') returning id`,
+      `insert into auth.users (id, phone, raw_user_meta_data)
+       values (gen_random_uuid(), $1, '{"display_name":"Norf"}') returning id`,
       [p]
     );
     const authId = rows[0].id;
@@ -27,7 +33,7 @@ describe("signup provisioning (auth.users trigger)", () => {
 
   it("missing display_name metadata falls back to a placeholder", async () => {
     const { rows } = await q(
-      `insert into auth.users (phone) values ($1) returning id`,
+      `insert into auth.users (id, phone) values (gen_random_uuid(), $1) returning id`,
       [phone()]
     );
     const u = (await q(`select display_name from users where id = $1`, [rows[0].id]))
