@@ -13,12 +13,22 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "@/hooks/useAuth";
+import { DEV_EMAIL_AUTH } from "@/config";
 import { base, colors } from "@/theme";
 import { MAX_OS_FONT_SCALE } from "@/theme/accessibility";
 
+// Phone is the shipping method (spec §8). The other two exist only so
+// development isn't blocked: US SMS needs a registered A2P sender, and
+// Supabase's built-in mailer allows 2 messages/hour. Both are gated behind
+// DEV_EMAIL_AUTH and disappear from production builds.
+type Mode = "phone" | "email" | "password";
+
 export default function SignInScreen() {
-  const { sendCode, verifyCode } = useAuth();
+  const { sendCode, verifyCode, sendEmailCode, verifyEmailCode, signInWithPassword } = useAuth();
+  const [mode, setMode] = useState<Mode>("phone");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"phone" | "code">("phone");
   const [busy, setBusy] = useState(false);
@@ -32,16 +42,41 @@ export default function SignInScreen() {
     return digits.startsWith("+") ? digits : `+${digits}`;
   };
 
+  const emailValid = /^\S+@\S+\.\S+$/.test(email.trim());
+  const identifier = () => (mode === "phone" ? normalizedPhone() : email.trim());
+
+  const identifierReady =
+    mode === "phone"
+      ? phone.trim().length >= 10
+      : mode === "email"
+        ? emailValid
+        : emailValid && password.length > 0;
+
+  // Password mode signs in outright; the OTP modes send a code first.
   const onSend = async () => {
     setBusy(true);
     setMessage(null);
-    const { error } = await sendCode(normalizedPhone());
+
+    if (mode === "password") {
+      Keyboard.dismiss();
+      const { error } = await signInWithPassword(email.trim(), password);
+      setBusy(false);
+      if (error) setMessage(error.message);
+      return;
+    }
+
+    const { error } =
+      mode === "email" ? await sendEmailCode(email.trim()) : await sendCode(normalizedPhone());
     setBusy(false);
     if (error) {
       setMessage(error.message);
     } else {
       setStep("code");
-      setMessage("We texted you a 6-digit code.");
+      setMessage(
+        mode === "email"
+          ? "We emailed you a 6-digit code."
+          : "We texted you a 6-digit code."
+      );
     }
   };
 
@@ -49,7 +84,10 @@ export default function SignInScreen() {
     setBusy(true);
     setMessage(null);
     Keyboard.dismiss();
-    const { error } = await verifyCode(normalizedPhone(), code.trim());
+    const { error } =
+      mode === "email"
+        ? await verifyEmailCode(email.trim(), code.trim())
+        : await verifyCode(normalizedPhone(), code.trim());
     setBusy(false);
     if (error) setMessage(error.message);
     // On success the auth listener in App.tsx swaps to the list screen.
@@ -66,22 +104,58 @@ export default function SignInScreen() {
         </Text>
         <Text style={styles.subtitle} maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
           {step === "phone"
-            ? "Sign in with your phone number"
-            : `Enter the code we sent to ${normalizedPhone()}`}
+            ? mode === "phone"
+              ? "Sign in with your phone number"
+              : mode === "email"
+                ? "Sign in with your email"
+                : "Dev sign-in with test account"
+            : `Enter the code we sent to ${identifier()}`}
         </Text>
 
         {step === "phone" ? (
-          <TextInput
-            style={styles.input}
-            placeholder="Phone number"
-            placeholderTextColor={colors.textSecondary}
-            keyboardType="phone-pad"
-            autoComplete="tel"
-            value={phone}
-            onChangeText={setPhone}
-            onSubmitEditing={onSend}
-            accessibilityLabel="Phone number"
-          />
+          mode === "phone" ? (
+            <TextInput
+              style={styles.input}
+              placeholder="Phone number"
+              placeholderTextColor={colors.textSecondary}
+              keyboardType="phone-pad"
+              autoComplete="tel"
+              value={phone}
+              onChangeText={setPhone}
+              onSubmitEditing={onSend}
+              accessibilityLabel="Phone number"
+            />
+          ) : (
+            <>
+              <TextInput
+                style={styles.input}
+                placeholder="Email address"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                value={email}
+                onChangeText={setEmail}
+                onSubmitEditing={onSend}
+                accessibilityLabel="Email address"
+              />
+              {mode === "password" && (
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  placeholderTextColor={colors.textSecondary}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  value={password}
+                  onChangeText={setPassword}
+                  onSubmitEditing={onSend}
+                  accessibilityLabel="Password"
+                />
+              )}
+            </>
+          )
         ) : (
           <TextInput
             style={styles.input}
@@ -101,14 +175,14 @@ export default function SignInScreen() {
         <Pressable
           style={({ pressed }) => [styles.button, pressed && { opacity: 0.8 }]}
           onPress={step === "phone" ? onSend : onVerify}
-          disabled={busy || (step === "phone" ? phone.trim().length < 10 : code.trim().length < 6)}
+          disabled={busy || (step === "phone" ? !identifierReady : code.trim().length < 6)}
           accessibilityRole="button"
         >
           {busy ? (
             <ActivityIndicator color={colors.accentText} />
           ) : (
             <Text style={styles.buttonText} maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
-              {step === "phone" ? "Send code" : "Verify"}
+              {step === "code" ? "Verify" : mode === "password" ? "Sign in" : "Send code"}
             </Text>
           )}
         </Pressable>
@@ -124,7 +198,28 @@ export default function SignInScreen() {
             accessibilityRole="button"
           >
             <Text style={styles.linkText} maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
-              Use a different number
+              {mode === "phone" ? "Use a different number" : "Use a different email"}
+            </Text>
+          </Pressable>
+        )}
+
+        {/* Dev-only mode switcher (see src/config.ts). Cycles phone -> password
+            -> email -> phone; password is first because it needs no delivery. */}
+        {DEV_EMAIL_AUTH && step === "phone" && (
+          <Pressable
+            style={styles.linkButton}
+            onPress={() => {
+              setMode((m) => (m === "phone" ? "password" : m === "password" ? "email" : "phone"));
+              setMessage(null);
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={styles.linkText} maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
+              {mode === "phone"
+                ? "Dev: password sign-in"
+                : mode === "password"
+                  ? "Dev: email code instead"
+                  : "Back to phone sign-in"}
             </Text>
           </Pressable>
         )}

@@ -6,9 +6,12 @@ import { registerPushToken } from "@/api/rpc";
 
 // Foreground: list updates in real time via Supabase Realtime; banners are
 // for people NOT looking at the app.
+// SDK 54's expo-notifications replaced the single `shouldShowAlert` with
+// `shouldShowBanner` (heads-up) and `shouldShowList` (notification center).
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: false,
+    shouldShowBanner: false,
+    shouldShowList: false,
     shouldPlaySound: false,
     shouldSetBadge: true,
   }),

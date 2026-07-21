@@ -1,4 +1,5 @@
-import { ActivityIndicator, SafeAreaView, StatusBar, View } from "react-native";
+import { ActivityIndicator, StatusBar, View } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/hooks/useAuth";
 import SignInScreen from "@/screens/SignInScreen";
 import ListScreen from "@/screens/ListScreen";
@@ -8,7 +9,8 @@ export default function App() {
   const { userId, loading } = useAuth();
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaProvider>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <StatusBar barStyle="dark-content" />
       {loading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
@@ -19,6 +21,7 @@ export default function App() {
       ) : (
         <SignInScreen />
       )}
-    </SafeAreaView>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }

@@ -29,6 +29,21 @@ export function useAuth() {
     /** Step 2: verify the 6-digit code. */
     verifyCode: (phone: string, token: string) =>
       supabase.auth.verifyOtp({ phone, token, type: "sms" }),
+
+    // Email OTP — development only (see DEV_EMAIL_AUTH in src/config.ts).
+    // Phone is the account identity per spec §8; this exists because US SMS
+    // requires a registered A2P sender, which isn't available on a trial.
+    sendEmailCode: (email: string) => supabase.auth.signInWithOtp({ email }),
+    verifyEmailCode: (email: string, token: string) =>
+      supabase.auth.verifyOtp({ email, token, type: "email" }),
+
+    // Password — development only. Supabase's built-in mailer allows just 2
+    // messages/hour, which makes OTP unusable while iterating. Test users are
+    // created by hand in the dashboard (Authentication > Users > Add user,
+    // with "Auto Confirm User" checked). No production path uses this.
+    signInWithPassword: (email: string, password: string) =>
+      supabase.auth.signInWithPassword({ email, password }),
+
     signOut: () => supabase.auth.signOut(),
   };
 }
