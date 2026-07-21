@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { parseInviteUrl } from "@/lib/links";
 import { useAuth } from "@/hooks/useAuth";
-import { useCartpool, type Item } from "@/hooks/useCartpool";
+import { useCartpool, type BulkOptIn, type Item } from "@/hooks/useCartpool";
 import ShareScreen from "@/screens/ShareScreen";
 import { base, colors, groupPalette } from "@/theme";
 import { LARGE_TEXT_SCALE, MAX_OS_FONT_SCALE } from "@/theme/accessibility";
@@ -139,26 +139,78 @@ export default function ListScreen({ userId }: { userId: string }) {
     }
   };
 
+  // One-tap opt-in / reconfirm on the bulk chip (spec §5). No opt-out exists
+  // server-side, so this is entry-only; backing out is a conversation, not a
+  // button.
+  const onBulkAction = async (item: Item) => {
+    const mine = (cp.optIns[item.id] ?? []).find((o) => o.user_id === userId);
+    if (mine?.needs_reconfirmation) {
+      const res = await cp.bulkReconfirm(item.id);
+      if (!res.ok) Alert.alert("Couldn't reconfirm", friendlyError(res.error));
+    } else if (!mine) {
+      const res = await cp.bulkOptIn(item.id);
+      if (!res.ok && res.error !== "already_opted_in") {
+        Alert.alert("Couldn't opt in", friendlyError(res.error));
+      }
+    }
+  };
+
+  const assignTargets = (item: Item): { id: string; name: string }[] => {
+    const g = cp.groups.find((x) => x.id === item.group_id);
+    const already = new Set((cp.optIns[item.id] ?? []).map((o) => o.user_id));
+    return (g?.memberIds ?? [])
+      .filter((id) => id !== userId && !already.has(id))
+      .map((id) => ({ id, name: cp.nameOf(id) }));
+  };
+
   const onRowLongPress = (item: Item) => {
-    if (item.added_by !== userId) return; // only the adder edits/removes (spec §4)
-    Alert.alert(item.text, undefined, [
-      {
+    const actions: { text: string; style?: "destructive" | "cancel"; onPress?: () => void }[] =
+      [];
+    if (item.added_by === userId) {
+      // Only the adder edits/removes (spec §4).
+      actions.push({
         text: "Edit text",
         onPress: () => {
           setEditing(item);
           setDraft(item.text);
         },
-      },
-      {
+      });
+      actions.push({
         text: "Remove",
         style: "destructive",
         onPress: async () => {
           const res = await cp.removeItem(item.id);
           if (!res.ok) Alert.alert("Couldn't remove", friendlyError(res.error));
         },
-      },
-      { text: "Cancel", style: "cancel" },
-    ]);
+      });
+    }
+    // Retroactive assignment: buyer only, purchased bulk items only (spec §5).
+    if (item.is_bulk && item.status === "purchased" && item.purchased_by === userId) {
+      const targets = assignTargets(item);
+      if (targets.length > 0) {
+        actions.push({
+          text: "Add someone to this bulk item",
+          onPress: () =>
+            Alert.alert(
+              "Who shared it?",
+              "They'll be marked in on this item.",
+              [
+                ...targets.map((t) => ({
+                  text: t.name,
+                  onPress: async () => {
+                    const res = await cp.bulkAssign(item.id, t.id);
+                    if (!res.ok) Alert.alert("Couldn't add them", friendlyError(res.error));
+                  },
+                })),
+                { text: "Cancel", style: "cancel" as const },
+              ]
+            ),
+        });
+      }
+    }
+    if (actions.length === 0) return;
+    actions.push({ text: "Cancel", style: "cancel" });
+    Alert.alert(item.text, undefined, actions);
   };
 
   // No navigator in the app yet (spec's depth budget is shallow enough that
@@ -354,8 +406,11 @@ export default function ListScreen({ userId }: { userId: string }) {
             color={(section as Section).color}
             scale={s}
             nameOf={cp.nameOf}
+            optIns={cp.optIns[item.id] ?? []}
+            userId={userId}
             onTap={() => onRowTap(item)}
             onLongPress={() => onRowLongPress(item)}
+            onBulkAction={() => onBulkAction(item)}
             mine={item.added_by === userId}
           />
         )}
@@ -396,19 +451,44 @@ function Row({
   color,
   scale: s,
   nameOf,
+  optIns,
+  userId,
   onTap,
   onLongPress,
+  onBulkAction,
   mine,
 }: {
   item: Item;
   color: string;
   scale: number;
   nameOf: (id: string | null) => string;
+  optIns: BulkOptIn[];
+  userId: string;
   onTap: () => void;
   onLongPress: () => void;
+  onBulkAction: () => void;
   mine: boolean;
 }) {
   const purchased = item.status === "purchased";
+  const myOptIn = optIns.find((o) => o.user_id === userId);
+  // The chip is the one-tap opt-in (spec §5) — or the reconfirm tap when the
+  // adder's edit invalidated my pre-commit. Once I'm in and current, it's a
+  // passive badge (there is no opt-out).
+  const chip = !item.is_bulk
+    ? null
+    : myOptIn?.needs_reconfirmation
+    ? ("reconfirm" as const)
+    : myOptIn
+    ? ("in" as const)
+    : ("join" as const);
+  const others = optIns.filter((o) => o.user_id !== userId);
+  const shareLine =
+    item.is_bulk && optIns.length > 0
+      ? ` · In: ${[
+          ...(myOptIn ? ["you"] : []),
+          ...others.map((o) => nameOf(o.user_id)),
+        ].join(", ")}`
+      : "";
   return (
     <Pressable
       onPress={onTap}
@@ -462,8 +542,52 @@ function Row({
             ? `Bought by ${nameOf(item.purchased_by)}${when(item.purchased_at)}`
             : `For ${nameOf(item.added_by)}`}
           {item.bulk_note ? ` · ${item.bulk_note}` : ""}
+          {shareLine}
         </Text>
       </View>
+      {chip && (
+        <Pressable
+          onPress={onBulkAction}
+          disabled={chip === "in"}
+          style={[
+            styles.optInChip,
+            { minHeight: base.tapTarget * s, minWidth: base.tapTarget * s },
+            chip === "join" && { borderColor: color },
+            chip === "in" && {
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+            },
+            chip === "reconfirm" && {
+              borderColor: colors.danger,
+              backgroundColor: colors.background,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={
+            chip === "join"
+              ? `Opt in to share ${item.text}`
+              : chip === "reconfirm"
+              ? `${item.text} changed after you opted in. Tap to confirm you're still in.`
+              : `You're in on ${item.text}`
+          }
+        >
+          <Text
+            style={{
+              color:
+                chip === "join"
+                  ? color
+                  : chip === "reconfirm"
+                  ? colors.danger
+                  : colors.textSecondary,
+              fontSize: base.fontSizeSmall * s,
+              fontWeight: "700",
+            }}
+            maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+          >
+            {chip === "join" ? "I'm in" : chip === "reconfirm" ? "Still in?" : "In ✓"}
+          </Text>
+        </Pressable>
+      )}
     </Pressable>
   );
 }
@@ -494,6 +618,14 @@ function friendlyError(code: string): string {
       return "That item isn't open anymore.";
     case "not_found":
       return "That item no longer exists.";
+    case "not_a_bulk_item":
+      return "That's not a bulk item anymore.";
+    case "not_buyer":
+      return "Only the person who bought it can add people to it.";
+    case "target_not_a_member":
+      return "They're not in this list anymore.";
+    case "nothing_to_reconfirm":
+      return "Nothing to reconfirm — you're all set.";
     default:
       return `Something went wrong (${code}).`;
   }
@@ -594,6 +726,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   rowBody: { flex: 1, gap: 2 },
+  optInChip: {
+    borderWidth: 1.5,
+    borderRadius: base.radius,
+    paddingHorizontal: base.spacing,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   empty: {
     color: colors.textSecondary,
     fontSize: base.fontSize,

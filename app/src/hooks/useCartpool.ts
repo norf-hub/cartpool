@@ -18,7 +18,19 @@ export type Item = {
   purchased_at: string | null;
   is_bulk: boolean;
   bulk_note: string | null;
+  /** True while any pre-commit opt-in is awaiting reconfirmation after an edit. */
+  bulk_needs_reconfirm: boolean;
   created_at: string;
+};
+
+/** One member's share of a bulk item (spec §5): binary in, no quantity. */
+export type BulkOptIn = {
+  item_id: string;
+  user_id: string;
+  /** true = pre-commit while open; false = joined/assigned after purchase. */
+  committed_before_purchase: boolean;
+  /** The adder edited the text after this pre-commit; it needs re-agreeing. */
+  needs_reconfirmation: boolean;
 };
 
 export type GroupInfo = {
@@ -51,6 +63,7 @@ export function useCartpool(userId: string | null) {
   const [items, setItems] = useState<Item[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
+  const [optIns, setOptIns] = useState<Record<string, BulkOptIn[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -98,7 +111,7 @@ export function useCartpool(userId: string | null) {
         pub()
           .from("items")
           .select(
-            "id, group_id, added_by, text, status, purchased_by, purchased_at, is_bulk, bulk_note, created_at"
+            "id, group_id, added_by, text, status, purchased_by, purchased_at, is_bulk, bulk_note, bulk_needs_reconfirm, created_at"
           )
           .in("group_id", groupIds)
           .neq("status", "removed")
@@ -118,7 +131,28 @@ export function useCartpool(userId: string | null) {
             .map((m) => m.user_id as string),
         }))
       );
-      setItems((itemsRes.data ?? []) as Item[]);
+      const loadedItems = (itemsRes.data ?? []) as Item[];
+      setItems(loadedItems);
+
+      // Opt-ins for the visible bulk items. A second round trip keyed on item
+      // ids (rather than a join) keeps the RLS story simple: the
+      // bulk_opt_ins_select policy already scopes rows to my groups' items.
+      const bulkIds = loadedItems.filter((i) => i.is_bulk).map((i) => i.id);
+      if (bulkIds.length > 0) {
+        const { data: ins, error: eB } = await pub()
+          .from("bulk_opt_ins")
+          .select("item_id, user_id, committed_before_purchase, needs_reconfirmation")
+          .in("item_id", bulkIds)
+          .order("created_at", { ascending: true });
+        if (eB) throw eB;
+        const byItem: Record<string, BulkOptIn[]> = {};
+        for (const o of (ins ?? []) as BulkOptIn[]) {
+          (byItem[o.item_id] ??= []).push(o);
+        }
+        setOptIns(byItem);
+      } else {
+        setOptIns({});
+      }
       setNames(
         Object.fromEntries(
           (profilesRes.data ?? []).map((p) => [p.id as string, p.display_name as string])
@@ -151,6 +185,11 @@ export function useCartpool(userId: string | null) {
         { event: "*", schema: "public", table: "memberships" },
         queueRefresh
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "bulk_opt_ins" },
+        queueRefresh
+      )
       .subscribe();
     return () => {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
@@ -175,6 +214,7 @@ export function useCartpool(userId: string | null) {
     items,
     names,
     waitlist,
+    optIns,
     loading,
     error,
     refresh,
@@ -186,6 +226,13 @@ export function useCartpool(userId: string | null) {
     unmarkPurchased: (itemId: string) => act(() => rpc.unmarkPurchased(itemId)),
     removeItem: (itemId: string) => act(() => rpc.removeItem(itemId)),
     editItemText: (itemId: string, text: string) => act(() => rpc.editItemText(itemId, text)),
+    /** One-tap bulk share (spec §5). Pre-commit if open, self-serve if bought. */
+    bulkOptIn: (itemId: string) => act(() => rpc.bulkOptIn(itemId)),
+    /** Buyer adds someone to an already-purchased bulk item. */
+    bulkAssign: (itemId: string, targetUserId: string) =>
+      act(() => rpc.bulkAssign(itemId, targetUserId)),
+    /** Re-agree to a bulk item whose text changed after my pre-commit. */
+    bulkReconfirm: (itemId: string) => act(() => rpc.bulkReconfirm(itemId)),
     /** Mint a 7-day invite code for a group the user belongs to (spec §3). */
     createInvite: (groupId: string) => rpc.createInvite(groupId, "link"),
     /**
