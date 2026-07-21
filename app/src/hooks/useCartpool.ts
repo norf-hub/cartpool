@@ -33,6 +33,16 @@ export type Profile = {
   large_text_mode: boolean;
 };
 
+/**
+ * A pending join: the group was full at redemption, so redeem_invite queued
+ * the user instead (spec §3). Visible via the waitlist_select RLS policy,
+ * which is scoped to the user's own rows — the queue itself is not readable.
+ */
+export type WaitlistEntry = {
+  group_id: string;
+  requested_at: string;
+};
+
 const pub = () => supabase.schema("public");
 
 export function useCartpool(userId: string | null) {
@@ -40,6 +50,7 @@ export function useCartpool(userId: string | null) {
   const [groups, setGroups] = useState<GroupInfo[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -55,6 +66,22 @@ export function useCartpool(userId: string | null) {
         .is("left_at", null);
       if (e1) throw e1;
       const groupIds = (mine ?? []).map((m) => m.group_id as string).sort();
+
+      // Pending joins are for groups the user is NOT in, so this can't be
+      // scoped by groupIds and must run even when they have no groups.
+      // promote_waitlist stamps promoted_at rather than deleting the row, so
+      // an unfiltered read would keep showing "you're on the waitlist" to
+      // someone who has already been let in. Ordering matches the server's
+      // FCFS key (requested_at, then seq for same-instant ties).
+      const { data: queued, error: eW } = await pub()
+        .from("waitlist_entries")
+        .select("group_id, requested_at")
+        .eq("user_id", userId)
+        .is("promoted_at", null)
+        .order("requested_at", { ascending: true })
+        .order("seq", { ascending: true });
+      if (eW) throw eW;
+      setWaitlist((queued ?? []) as WaitlistEntry[]);
 
       if (groupIds.length === 0) {
         setGroups([]);
@@ -147,6 +174,7 @@ export function useCartpool(userId: string | null) {
     groups,
     items,
     names,
+    waitlist,
     loading,
     error,
     refresh,
@@ -158,5 +186,13 @@ export function useCartpool(userId: string | null) {
     unmarkPurchased: (itemId: string) => act(() => rpc.unmarkPurchased(itemId)),
     removeItem: (itemId: string) => act(() => rpc.removeItem(itemId)),
     editItemText: (itemId: string, text: string) => act(() => rpc.editItemText(itemId, text)),
+    /** Mint a 7-day invite code for a group the user belongs to (spec §3). */
+    createInvite: (groupId: string) => rpc.createInvite(groupId, "link"),
+    /**
+     * Accept an invite. On success this may join the group outright or queue
+     * the user behind a full one; either way the membership and waitlist reads
+     * need to re-run, hence act().
+     */
+    redeemInvite: (code: string) => act(() => rpc.redeemInvite(code)),
   };
 }

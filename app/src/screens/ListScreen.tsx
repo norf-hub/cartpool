@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { useAuth } from "@/hooks/useAuth";
 import { useCartpool, type Item } from "@/hooks/useCartpool";
+import ShareScreen from "@/screens/ShareScreen";
 import { base, colors, groupPalette } from "@/theme";
 import { LARGE_TEXT_SCALE, MAX_OS_FONT_SCALE } from "@/theme/accessibility";
 
@@ -27,6 +28,7 @@ export default function ListScreen({ userId }: { userId: string }) {
   const [draftBulk, setDraftBulk] = useState(false);
   const [targetGroup, setTargetGroup] = useState<string | null>(null);
   const [editing, setEditing] = useState<Item | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   // In-app large-text toggle: fixed scale on text AND row height together
   // (addendum §4.1). OS font scaling stacks on top, capped at 2.0.
@@ -128,6 +130,22 @@ export default function ListScreen({ userId }: { userId: string }) {
     ]);
   };
 
+  // No navigator in the app yet (spec's depth budget is shallow enough that
+  // one swap is cheaper than a dependency), so share is a full-screen swap.
+  if (sharing) {
+    return (
+      <ShareScreen
+        groups={cp.groups}
+        groupTitle={groupTitle}
+        memberCount={(id) => cp.groups.find((g) => g.id === id)?.memberIds.length ?? 0}
+        scale={s}
+        onCreateInvite={cp.createInvite}
+        onRedeem={cp.redeemInvite}
+        onClose={() => setSharing(false)}
+      />
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={styles.root}
@@ -138,25 +156,54 @@ export default function ListScreen({ userId }: { userId: string }) {
           maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
           Cartpool
         </Text>
-        <Pressable
-          onPress={() =>
-            Alert.alert("Sign out?", undefined, [
-              { text: "Cancel", style: "cancel" },
-              { text: "Sign out", style: "destructive", onPress: () => signOut() },
-            ])
-          }
-          style={styles.signOut}
-          accessibilityRole="button"
-          accessibilityLabel="Sign out"
-        >
-          <Text
-            style={{ color: colors.textSecondary, fontSize: base.fontSizeSmall * s }}
-            maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => setSharing(true)}
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel="Invite someone or join a list"
           >
-            Sign out
-          </Text>
-        </Pressable>
+            <Text
+              style={{
+                color: colors.accent,
+                fontSize: base.fontSizeSmall * s,
+                fontWeight: "700",
+              }}
+              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+            >
+              Share
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() =>
+              Alert.alert("Sign out?", undefined, [
+                { text: "Cancel", style: "cancel" },
+                { text: "Sign out", style: "destructive", onPress: () => signOut() },
+              ])
+            }
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel="Sign out"
+          >
+            <Text
+              style={{ color: colors.textSecondary, fontSize: base.fontSizeSmall * s }}
+              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+            >
+              Sign out
+            </Text>
+          </Pressable>
+        </View>
       </View>
+
+      {/* Queued behind a full group — promotion is automatic and FCFS, so
+          this is informational, not an action (spec §3). */}
+      {cp.waitlist.length > 0 && (
+        <Text style={styles.waitlistBanner} maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
+          {cp.waitlist.length === 1
+            ? "You're on the waitlist for a full list. You'll be added as soon as a spot opens."
+            : `You're on the waitlist for ${cp.waitlist.length} full lists. You'll be added as spots open.`}
+        </Text>
+      )}
 
       {cp.error && (
         <Text style={styles.errorBanner} maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
@@ -276,9 +323,28 @@ export default function ListScreen({ userId }: { userId: string }) {
         )}
         ListEmptyComponent={
           cp.loading ? null : (
-            <Text style={styles.empty} maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
-              Nothing on the list yet. Add your first item above.
-            </Text>
+            <View>
+              <Text style={styles.empty} maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
+                Nothing on the list yet. Add your first item above.
+              </Text>
+              <Pressable
+                onPress={() => setSharing(true)}
+                style={[styles.emptyAction, { minHeight: base.tapTarget * s }]}
+                accessibilityRole="button"
+                accessibilityLabel="Share this list with someone, or join someone else's"
+              >
+                <Text
+                  style={{
+                    color: colors.accent,
+                    fontSize: base.fontSize * s,
+                    fontWeight: "600",
+                  }}
+                  maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+                >
+                  Share it with someone, or join a list
+                </Text>
+              </Pressable>
+            </View>
           )
         }
         contentContainerStyle={{ paddingBottom: base.spacing * 4 }}
@@ -405,7 +471,8 @@ const styles = StyleSheet.create({
     paddingTop: base.spacing / 2,
   },
   headerTitle: { fontWeight: "700", color: colors.accent },
-  signOut: {
+  headerActions: { flexDirection: "row", alignItems: "center", gap: base.spacing / 2 },
+  headerButton: {
     minHeight: base.tapTarget,
     minWidth: base.tapTarget,
     alignItems: "center",
@@ -413,6 +480,13 @@ const styles = StyleSheet.create({
   },
   errorBanner: {
     color: colors.danger,
+    paddingHorizontal: base.spacing,
+    paddingVertical: base.spacing / 2,
+  },
+  waitlistBanner: {
+    color: colors.textSecondary,
+    backgroundColor: colors.surface,
+    fontSize: base.fontSizeSmall,
     paddingHorizontal: base.spacing,
     paddingVertical: base.spacing / 2,
   },
@@ -487,5 +561,10 @@ const styles = StyleSheet.create({
     fontSize: base.fontSize,
     textAlign: "center",
     padding: base.spacing * 2,
+  },
+  emptyAction: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: base.spacing * 2,
   },
 });
