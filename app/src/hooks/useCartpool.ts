@@ -27,11 +27,13 @@ export type Item = {
  * My subscription row (spec §9). Absent row = free tier, nothing frozen.
  * frozen_read_only: entitlement lapsed with >3 groups; read-only EVERYWHERE
  * until choose_kept_groups succeeds. After that, kept_group_ids is set and
- * only groups outside it stay read-only (until resubscribe clears it).
+ * only groups outside it stay read-only (until the one-time purchase clears it).
  */
 export type Subscription = {
+  /** v3.1: lifetime cartpool_unlimited, granted by the one-time $10 purchase. */
   entitlement_active: boolean;
-  in_grace_period: boolean;
+  /** Unlimited groups until this instant (3 months from signup). */
+  trial_ends_at: string;
   frozen_read_only: boolean;
   kept_group_ids: string[] | null;
 };
@@ -59,6 +61,31 @@ export type Profile = {
 };
 
 /**
+ * "Up for grabs" (spec v3.2): surplus units from an over-sized pack, posted
+ * for groupmates to claim. unit_price_cents is a label only (null = free) —
+ * money changes hands offline and is never tracked.
+ */
+export type Offer = {
+  id: string;
+  group_id: string;
+  posted_by: string;
+  text: string;
+  qty_offered: number;
+  qty_remaining: number;
+  unit_price_cents: number | null;
+  created_at: string;
+  expires_at: string;
+  closed_at: string | null;
+};
+
+/** One member's claim on an offer; qty accumulates across repeat claims. */
+export type OfferClaim = {
+  offer_id: string;
+  user_id: string;
+  qty: number;
+};
+
+/**
  * A pending join: the group was full at redemption, so redeem_invite queued
  * the user instead (spec §3). Visible via the waitlist_select RLS policy,
  * which is scoped to the user's own rows — the queue itself is not readable.
@@ -77,6 +104,8 @@ export function useCartpool(userId: string | null) {
   const [names, setNames] = useState<Record<string, string>>({});
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
   const [optIns, setOptIns] = useState<Record<string, BulkOptIn[]>>({});
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [claims, setClaims] = useState<Record<string, OfferClaim[]>>({});
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +128,7 @@ export function useCartpool(userId: string | null) {
       // open until resolved, and the flag flips server-side via webhook.
       const { data: sub, error: eS } = await pub()
         .from("subscriptions")
-        .select("entitlement_active, in_grace_period, frozen_read_only, kept_group_ids")
+        .select("entitlement_active, trial_ends_at, frozen_read_only, kept_group_ids")
         .eq("user_id", userId)
         .maybeSingle();
       if (eS) throw eS;
@@ -124,6 +153,8 @@ export function useCartpool(userId: string | null) {
       if (groupIds.length === 0) {
         setGroups([]);
         setItems([]);
+        setOffers([]);
+        setClaims({});
         return;
       }
 
@@ -178,6 +209,36 @@ export function useCartpool(userId: string | null) {
       } else {
         setOptIns({});
       }
+      // Open offers in my groups (v3.2). Expired ones drop out client-side
+      // too so the section self-cleans between purges.
+      const { data: offs, error: eO } = await pub()
+        .from("offers")
+        .select(
+          "id, group_id, posted_by, text, qty_offered, qty_remaining, unit_price_cents, created_at, expires_at, closed_at"
+        )
+        .in("group_id", groupIds)
+        .is("closed_at", null)
+        .gt("expires_at", new Date().toISOString())
+        .order("created_at", { ascending: true });
+      if (eO) throw eO;
+      const openOffers = (offs ?? []) as Offer[];
+      setOffers(openOffers);
+
+      if (openOffers.length > 0) {
+        const { data: cls, error: eC } = await pub()
+          .from("offer_claims")
+          .select("offer_id, user_id, qty")
+          .in("offer_id", openOffers.map((o) => o.id));
+        if (eC) throw eC;
+        const byOffer: Record<string, OfferClaim[]> = {};
+        for (const c of (cls ?? []) as OfferClaim[]) {
+          (byOffer[c.offer_id] ??= []).push(c);
+        }
+        setClaims(byOffer);
+      } else {
+        setClaims({});
+      }
+
       setNames(
         Object.fromEntries(
           (profilesRes.data ?? []).map((p) => [p.id as string, p.display_name as string])
@@ -215,6 +276,16 @@ export function useCartpool(userId: string | null) {
         { event: "*", schema: "public", table: "bulk_opt_ins" },
         queueRefresh
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "offers" },
+        queueRefresh
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "offer_claims" },
+        queueRefresh
+      )
       .subscribe();
     return () => {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
@@ -240,6 +311,9 @@ export function useCartpool(userId: string | null) {
     names,
     waitlist,
     optIns,
+    offers,
+    /** Claims per offer id; each user appears once with an accumulated qty. */
+    offerClaims: claims,
     subscription,
     /** Read-only everywhere: lapsed with >3 groups, keepers not yet chosen. */
     frozen: subscription?.frozen_read_only ?? false,
@@ -251,8 +325,11 @@ export function useCartpool(userId: string | null) {
     isGroupReadOnly: (groupId: string) => {
       if (!subscription) return false;
       if (subscription.frozen_read_only) return true;
+      const entitled =
+        subscription.entitlement_active ||
+        new Date(subscription.trial_ends_at) > new Date();
       return (
-        !subscription.entitlement_active &&
+        !entitled &&
         subscription.kept_group_ids !== null &&
         !subscription.kept_group_ids.includes(groupId)
       );
@@ -296,5 +373,15 @@ export function useCartpool(userId: string | null) {
      * need to re-run, hence act().
      */
     redeemInvite: (code: string) => act(() => rpc.redeemInvite(code)),
+    /** Post surplus units "up for grabs" (spec v3.2). Price is a label. */
+    createOffer: (groupId: string, text: string, qty: number, priceCents: number | null) =>
+      act(() => rpc.createOffer(groupId, text, qty, priceCents)),
+    /** Claim units — one person may take 1..all of what's left. */
+    claimOffer: (offerId: string, qty: number) => act(() => rpc.claimOffer(offerId, qty)),
+    /** Give back part or all of my claim while the offer is open. */
+    unclaimOffer: (offerId: string, qty?: number) =>
+      act(() => rpc.unclaimOffer(offerId, qty)),
+    /** Poster withdraws the offer; existing claims stand. */
+    closeOffer: (offerId: string) => act(() => rpc.closeOffer(offerId)),
   };
 }

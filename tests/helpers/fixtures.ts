@@ -79,8 +79,14 @@ export async function mkInvite(
   return r.code;
 }
 
+/** Grant the lifetime entitlement (v3.1: one-time $10 purchase). */
 export const entitle = (user: string) =>
-  rpc("handle_entitlement_event", [user, "INITIAL_PURCHASE"]);
+  rpc("handle_entitlement_event", [user, "NON_RENEWING_PURCHASE"]);
+
+/** Put the user past their 3-month signup trial (v3.1). */
+export const expireTrial = (user: string) =>
+  q(`update subscriptions set trial_ends_at = now() - interval '1 day'
+     where user_id = $1`, [user]);
 
 export async function subscription(user: string) {
   const { rows } = await q(`select * from subscriptions where user_id = $1`, [user]);

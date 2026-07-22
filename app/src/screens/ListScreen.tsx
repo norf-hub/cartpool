@@ -19,6 +19,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCartpool, type BulkOptIn, type Item } from "@/hooks/useCartpool";
 import ChooseGroupsScreen from "@/screens/ChooseGroupsScreen";
 import GroupsScreen from "@/screens/GroupsScreen";
+import OffersScreen from "@/screens/OffersScreen";
 import ShareScreen from "@/screens/ShareScreen";
 import { base, colors, groupPalette } from "@/theme";
 import { LARGE_TEXT_SCALE, MAX_OS_FONT_SCALE } from "@/theme/accessibility";
@@ -44,6 +45,7 @@ export default function ListScreen({ userId }: { userId: string }) {
   const [noteEditing, setNoteEditing] = useState<Item | null>(null);
   const [sharing, setSharing] = useState(false);
   const [managing, setManaging] = useState(false);
+  const [grabbing, setGrabbing] = useState(false); // "Up for grabs" view (v3.2)
   const [pendingCode, setPendingCode] = useState<string | null>(null);
 
   // Invite deep links land here: prefill the join field and open the share
@@ -288,7 +290,7 @@ export default function ListScreen({ userId }: { userId: string }) {
           // purchases is already a dependency, so this is wiring, not surgery.
           Alert.alert(
             "Not available yet",
-            "Resubscribing isn't wired up in this build. Pick 3 lists for now — the others come back in full when you resubscribe later."
+            "Purchasing isn't wired up in this build. Pick 3 lists for now — the others come back in full when you unlock unlimited lists later."
           )
         }
       />
@@ -309,6 +311,26 @@ export default function ListScreen({ userId }: { userId: string }) {
         onLeave={cp.leaveGroup}
         onBlock={cp.blockUser}
         onClose={() => setManaging(false)}
+      />
+    );
+  }
+
+  if (grabbing) {
+    return (
+      <OffersScreen
+        userId={userId}
+        groups={cp.groups}
+        offers={cp.offers}
+        claims={cp.offerClaims}
+        scale={s}
+        groupTitle={groupTitle}
+        nameOf={cp.nameOf}
+        isGroupReadOnly={cp.isGroupReadOnly}
+        onCreate={cp.createOffer}
+        onClaim={cp.claimOffer}
+        onUnclaim={cp.unclaimOffer}
+        onCloseOffer={cp.closeOffer}
+        onClose={() => setGrabbing(false)}
       />
     );
   }
@@ -360,6 +382,23 @@ export default function ListScreen({ userId }: { userId: string }) {
               maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
             >
               Lists
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setGrabbing(true)}
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel="Extras up for grabs — post or claim surplus items"
+          >
+            <Text
+              style={{
+                color: cp.offers.length > 0 ? colors.accent : colors.textSecondary,
+                fontSize: base.fontSizeSmall * s,
+                fontWeight: "600",
+              }}
+              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+            >
+              {cp.offers.length > 0 ? `Extras (${cp.offers.length})` : "Extras"}
             </Text>
           </Pressable>
           <Pressable

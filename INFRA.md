@@ -11,10 +11,13 @@
 4. **Expo / EAS** — org + project, EAS Build/Submit configured for the three
    channels; register the APNs key and FCM server key with Expo push.
 5. **RevenueCat** — separate project/API keys per environment; two store
-   products ($5 / 3-month auto-renew) mapped to one `cartpool_unlimited`
-   entitlement; enable store billing grace periods; point the webhook at the
-   deployed `supabase/functions/revenuecat-webhook` URL and set the same
-   Authorization value as the `REVENUECAT_WEBHOOK_AUTH` function secret.
+   products mapped to one `cartpool_unlimited` entitlement — v3.1: a **$10
+   one-time purchase** (App Store: non-consumable; Play: one-time in-app
+   product), *not* a subscription, so no billing grace periods to configure;
+   point the webhook at the deployed `supabase/functions/revenuecat-webhook`
+   URL and set the same Authorization value as the `REVENUECAT_WEBHOOK_AUTH`
+   function secret. The 3-month free period is server-side (`trial_ends_at`),
+   not a store trial — nothing to set up in the stores for it.
 6. **GitHub** — repo + branch protection; CI already in `.github/workflows`.
    After the first `npm install`, commit `package-lock.json` and switch CI to
    `npm ci`.

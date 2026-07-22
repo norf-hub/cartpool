@@ -391,3 +391,60 @@ future prioritization. Not part of the initial build.
     times was feature X used this week” but never “what did user Y do,”
     which rules out funnel or retention analysis by design in exchange
     for the data being structurally non-reidentifiable.
+
+
+--------------------------------------------------------------------------
+
+Amendment v3.1 — July 21, 2026: Monetization change
+
+Supersedes the "$5 every 3 months" paid tier in §9 and the auto-renewing
+subscription mechanics under "Subscription billing implementation".
+
+New model:
+
+-   Every account gets unlimited groups for 3 months from account
+    creation (trial_ends_at, set at signup).
+-   After that, holding more than the 3 free groups requires a single
+    one-time $10 purchase ("unlock unlimited lists") — a lifetime
+    entitlement, not a subscription. No renewals, expirations,
+    cancellations, or billing grace periods exist.
+-   Trial expiry while over the limit funnels into the unchanged v3
+    downgrade flow: read-only everywhere → pick exactly 3 to keep →
+    excess groups stay read-only. The purchase clears any freeze or
+    pick without re-picking; nothing is ever deleted.
+-   Refunds (store-processed, via RevenueCat webhook) revoke the
+    entitlement; if the user is past their trial and over the limit,
+    the same downgrade flow triggers. A refund during the trial changes
+    nothing until the trial ends.
+-   Store products: one non-consumable (Apple) / one-time in-app
+    product (Google) at $10, both mapped to the single RevenueCat
+    entitlement cartpool_unlimited. Webhook events reduce to
+    INITIAL_PURCHASE / NON_RENEWING_PURCHASE / REFUND. Family Sharing,
+    device-continuity, and app_user_id mapping carry over unchanged.
+
+--------------------------------------------------------------------------
+
+Amendment v3.2 — July 21, 2026: "Up for grabs" (surplus sharing)
+
+New feature. Over-sized packs (typically online bulk purchases) leave the
+buyer with extras; this lets them shed the surplus inside their group.
+
+-   A member posts surplus units: item text + how many are available.
+    "I bought 4 nail clippers — anybody want the other 3?"
+-   Any groupmate can claim units while some remain. Claims are per-unit
+    and one person may claim more than one: with 3 available, Bill may
+    take 1, 2, or all 3 (repeat claims accumulate). Claiming decrements
+    availability atomically — the same serialization discipline as the
+    purchase race — so the last unit goes to exactly one person.
+-   Claimers can give back part or all of a claim while the offer is
+    open. The poster can take the offer down early; claims already made
+    stand. Offers expire after 14 days; expired/closed offers purge 14
+    days later. A member leaving a group closes their open offers and
+    releases their claims on others'.
+-   Pricing is the poster's choice and is a LABEL only: free, at cost,
+    or a named per-unit price. The app suggests the at-cost number
+    (pack price ÷ pack size) but never records who paid — consistent
+    with the no-IOU/no-ledger rule (§10). Handoff and any money are
+    settled offline.
+-   Non-goals: no payment tracking, no "mark as paid", no cross-group
+    or public marketplace. Offers are visible only inside the group.

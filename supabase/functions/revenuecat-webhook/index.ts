@@ -7,13 +7,11 @@
 // signature — constant-time compare and reject anything else.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+// v3.1: one-time lifetime purchase — no renewals, expirations, or billing
+// grace. RevenueCat reports one-time purchases as NON_RENEWING_PURCHASE.
 const HANDLED = new Set([
   "INITIAL_PURCHASE",
-  "RENEWAL",
-  "UNCANCELLATION",
-  "CANCELLATION",
-  "EXPIRATION",
-  "BILLING_ISSUE",
+  "NON_RENEWING_PURCHASE",
   "REFUND",
 ]);
 

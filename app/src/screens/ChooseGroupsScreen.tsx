@@ -2,8 +2,8 @@
 // than 3 groups, so the account is read-only everywhere until exactly 3 are
 // chosen to keep. Deliberately unescapable — no close button, and ListScreen
 // re-renders it on every app open while frozen_read_only holds. Nothing is
-// deleted: the excess groups stay read-only and come back whole on
-// resubscribe.
+// deleted: the excess groups stay read-only and come back whole after the
+// one-time unlock purchase (v3.1).
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -81,9 +81,9 @@ export default function ChooseGroupsScreen({
         style={[styles.body, { fontSize: base.fontSize * s }]}
         maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
       >
-        Your subscription ended, and the free plan includes 3 lists. Pick the 3
-        to keep using. The others aren't deleted — they become read-only, and
-        everything comes back if you resubscribe.
+        Your 3 free months are up, and the free plan includes 3 lists. Pick the
+        3 to keep using. The others aren't deleted — they become read-only, and
+        everything comes back if you unlock unlimited lists.
       </Text>
 
       <ScrollView contentContainerStyle={{ paddingBottom: base.spacing * 2 }}>
@@ -175,13 +175,13 @@ export default function ChooseGroupsScreen({
           onPress={onResubscribe}
           style={[styles.resub, { minHeight: base.tapTarget * s }]}
           accessibilityRole="button"
-          accessibilityLabel="Resubscribe instead and keep all lists"
+          accessibilityLabel="Unlock unlimited lists instead and keep them all"
         >
           <Text
             style={{ color: colors.accent, fontSize: base.fontSizeSmall * s, fontWeight: "600" }}
             maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
           >
-            Or resubscribe and keep them all
+            Or unlock unlimited lists ($10, one time) and keep them all
           </Text>
         </Pressable>
       </View>
@@ -194,7 +194,7 @@ function friendly(code: string): string {
     case "must_pick_exactly_3":
       return "Pick exactly 3 lists.";
     case "not_frozen":
-      // Webhook already cleared it (resubscribed on another device, say);
+      // Webhook already cleared it (purchased on another device, say);
       // the refresh will dismiss this screen on its own.
       return "Looks like this is already sorted — one moment.";
     case "not_a_member":

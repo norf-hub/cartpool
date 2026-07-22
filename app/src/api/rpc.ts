@@ -96,3 +96,26 @@ export const registerPushToken = (token: string, platform: "ios" | "android") =>
   call("register_push_token", { p_token: token, p_platform: platform });
 export const unregisterPushToken = (token: string) =>
   call("unregister_push_token", { p_token: token });
+
+// --- Up for grabs (0012, spec v3.2) ---------------------------------------
+// priceCents is a LABEL (null = free); no money is tracked, ever.
+export const createOffer = (
+  groupId: string,
+  text: string,
+  qty: number,
+  priceCents: number | null = null
+) =>
+  call<{ offer_id: string }>("create_offer", {
+    p_group: groupId,
+    p_text: text,
+    p_qty: qty,
+    p_unit_price_cents: priceCents,
+  });
+/** Claim `qty` units; repeat claims by the same user accumulate. */
+export const claimOffer = (offerId: string, qty: number) =>
+  call<{ qty_remaining: number }>("claim_offer", { p_offer: offerId, p_qty: qty });
+/** Give back `qty` units, or the whole claim when qty is omitted. */
+export const unclaimOffer = (offerId: string, qty?: number) =>
+  call("unclaim_offer", { p_offer: offerId, p_qty: qty ?? null });
+export const closeOffer = (offerId: string) =>
+  call("close_offer", { p_offer: offerId });

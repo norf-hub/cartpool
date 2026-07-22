@@ -1,8 +1,13 @@
 # Cartpool
 
 Shared shopping lists for small groups (max 4), with bulk-item splitting.
-Implements **Product Spec v3** and the Technical Addendum: React Native (Expo)
-client, Supabase (Postgres + Realtime) backend, RevenueCat subscriptions.
+Implements **Product Spec v3** (+ v3.1 monetization amendment) and the
+Technical Addendum: React Native (Expo) client, Supabase (Postgres + Realtime)
+backend, RevenueCat for the one-time unlock purchase.
+
+**Monetization (v3.1):** 3 months of unlimited groups from signup, then a
+one-time $10 lifetime purchase for more than the 3 free groups. No recurring
+subscription.
 
 ## Layout
 
@@ -18,6 +23,8 @@ supabase/
   migrations/0004_auth.sql       auth.uid() wrappers (api schema) + RLS on every table
   migrations/0005_cron.sql       pg_cron schedule for purge_retention() (NOTICE on bare Postgres)
   migrations/0006_push_and_signup.sql  push_tokens + registration RPCs; auth.users signup trigger
+  migrations/0011_one_time_purchase.sql  v3.1: trial_ends_at, is_entitled(), expire_trials() cron, purchase+refund-only lifecycle
+  migrations/0012_offers.sql     v3.2: "up for grabs" — post surplus units, per-unit accumulating claims, price-as-label
   functions/revenuecat-webhook/  Edge function -> handle_entitlement_event (service_role)
   functions/send-push/           Purchase push fan-out with §4.2 per-group stacking
 tests/                  Section 6 unit tests + auth tests (vitest + pg, real Postgres)
@@ -76,8 +83,9 @@ The suite drops and rebuilds `public` from `supabase/migrations` on each run.
 | `blocking.test.ts` | A leaves shared groups only; B untouched; **v3: co-placement barred both directions** at invite, link/code, and direct-insert (trigger backstop) |
 | `waitlist.test.ts` | Strict FCFS by `requested_at`, ties by insertion; blocked entries (either direction) skipped, next promoted; server-side expiry; cap trigger; **v3: solo merge on first invite and at promotion**; free-tier limit at redemption *and* promotion (skipped entries stay queued); CSPRNG invite-code format; merged purchased items enter the 2-day grace purge |
 | `bulk.test.ts` | Pre-commit vs retroactive flags; text edits force reconfirmation; only buyer assigns retroactively |
-| `subscription.test.ts` | Expiration/cancellation/refund each freeze at >3 groups; grace period doesn't; **v3 freeze scope: read-only everywhere → pick 3 → excess-only**; renewal clears without re-pick |
+| `subscription.test.ts` | v3.1: signup trial allows >3 groups; `expire_trials()` freezes unpaid over-limit users (no re-freeze after a pick); refund freezes only past-trial + over-limit; **v3 freeze scope: read-only everywhere → pick 3 → excess-only**; one-time purchase clears without re-pick; subscription-era events rejected |
 | `auth.test.ts` | Wrappers bind identity to `auth.uid()`; unauthenticated rejected; internal functions and direct table writes are `permission denied`; RLS row visibility incl. invisible `blocks` and phone-free profiles |
+| `offers.test.ts` | v3.2 up-for-grabs: multi-unit accumulating claims (Bill takes 1, 2, or all 3); racing claims can't oversell (conservation check); unclaim restores; poster-only close with claims standing; expiry + purge; leave-group housekeeping; frozen users barred |
 
 ## Not yet built (deliberately)
 

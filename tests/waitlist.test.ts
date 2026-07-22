@@ -10,6 +10,7 @@ import {
   soloGroupOf,
   item,
   entitle,
+  expireTrial,
 } from "./helpers/fixtures";
 
 type R = { ok: boolean; error?: string; waitlisted?: boolean; joined?: boolean };
@@ -78,6 +79,7 @@ describe("invite redemption", () => {
     const u = await mkUser("u");
     await rpc("create_group", [u]);
     await rpc("create_group", [u]); // solo + 2 = 3 groups
+    await expireTrial(u); // v3.1: past the signup trial, unpaid
     const host = await mkUser("host");
     const code = await mkInvite(await soloGroupOf(host), host);
     expect(await rpc<R>("redeem_invite", [code, u])).toMatchObject({
@@ -179,9 +181,10 @@ describe("full groups & waitlist", () => {
   it("skips a free-tier entry already at the 3-group limit and promotes the next", async () => {
     const { g, members } = await fullGroup();
     const [e, f] = [await mkUser("e"), await mkUser("f")];
-    // e now has 3 groups (solo + 2 created) with no entitlement.
+    // e now has 3 groups (solo + 2 created), past trial, unpaid (v3.1).
     await rpc("create_group", [e]);
     await rpc("create_group", [e]);
+    await expireTrial(e);
     const code = await mkInvite(g, members[0]);
     await rpc("redeem_invite", [code, e]); // waitlisted (group is full)
     await rpc("redeem_invite", [code, f]);

@@ -177,10 +177,13 @@ tap, per spec §3.
   Expo Go dropped remote push support anyway. Needs a development build.
 - **Subscribing** — the paywall is a stub until RevenueCat is configured
   (INFRA.md step 5).
-- **The pick-3 downgrade screen** — needs a frozen account. To force one, in
-  Studio's SQL editor: `update subscriptions set frozen_read_only = true where
-  user_id = '<your-uuid>';` — but you need more than 3 groups for it to be
-  meaningful, so this is easier to leave until you have test data.
+- **The pick-3 downgrade screen** — needs a frozen account. The realistic
+  route (v3.1): end the trial early, then run the expiry job — in Studio's
+  SQL editor: `update subscriptions set trial_ends_at = now() - interval
+  '1 day' where user_id = '<your-uuid>'; select expire_trials();` — but you
+  need more than 3 groups for the freeze to trigger, so this is easier to
+  leave until you have test data. (`update subscriptions set frozen_read_only
+  = true ...` still works as a blunt shortcut.)
 
 ---
 
