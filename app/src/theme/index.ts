@@ -1,30 +1,50 @@
 // Visual constants. Sizes here are BASE sizes — multiply by the large-text
 // scale (see useScale in hooks/useProfile) before use, so the in-app toggle
 // grows text and tap targets together (addendum §4.1).
+//
+// Palette + type follow the "Organic" design system (design-tool export):
+// a warm cream ground, terracotta accent, sage secondary, Caprasimo display
+// over Figtree body. Tokens mirror styles.css / the _ds_manifest exactly,
+// except where the app's hard accessibility constraints take precedence
+// (noted inline).
 import { MIN_TAP_TARGET_IOS_PT } from "@/theme/accessibility";
 
 export const colors = {
-  background: "#FFFFFF",
-  surface: "#F6F7F8",
-  text: "#1A1D1F",
-  textSecondary: "#5C6570",
-  accent: "#2E7D5B", // primary green
-  accentText: "#FFFFFF",
-  danger: "#B3261E",
-  border: "#E2E5E8",
-  purchased: "#9AA3AC",
+  background: "#f5ead8", // --color-bg
+  surface: "#ebddc5", // --color-surface
+  text: "#201e1d", // --color-text
+  // RN has no color-mix(): --color-text @55% ≈ neutral-600, used for muted text.
+  textSecondary: "#82796a", // --color-neutral-600
+  accent: "#c67139", // --color-accent (terracotta)
+  // Text/icons drawn ON the accent fill. Organic uses the cream bg here; we
+  // use white for a stronger contrast on small controls (a11y is a hard
+  // constraint for this audience).
+  accentText: "#ffffff",
+  danger: "#9e2f1a", // warm red that sits in the Organic family
+  border: "#dcd3c4", // --color-neutral-300 (~ --color-divider)
+  purchased: "#a19786", // --color-neutral-500
 };
 
-// Per-group color tags for the merged list (spec §2). Assigned by stable
-// group-id sort order so a group keeps its color between launches.
+// Per-person color tags for the merged cross-group list (v3.3). Drawn from
+// the Organic accent + accent-2 ramps so every tag stays on-theme while
+// remaining distinguishable. Assigned by stable pool order.
 export const groupPalette = [
-  "#2E7D5B", // green
-  "#3A6EA5", // blue
-  "#B0631C", // amber
-  "#7B4FA6", // purple
-  "#A63A5A", // rose
-  "#3A8FA6", // teal
+  "#c67139", // accent-500 terracotta
+  "#7a8a5e", // accent-2 sage
+  "#8c491a", // accent-700 burnt
+  "#8fa073", // accent-2-500 light sage
+  "#b2622d", // accent-600 amber-brown
+  "#56633f", // accent-2-700 olive
 ];
+
+// Font family names as registered by @expo-google-fonts (see App.tsx).
+// Caprasimo is display-only (per the Fonts choice); Figtree carries body.
+export const fonts = {
+  heading: "Caprasimo_400Regular",
+  body: "Figtree_400Regular",
+  bodyMedium: "Figtree_600SemiBold",
+  bodyBold: "Figtree_700Bold",
+};
 
 export const base = {
   fontSize: 17,
@@ -33,5 +53,5 @@ export const base = {
   rowMinHeight: Math.max(56, MIN_TAP_TARGET_IOS_PT),
   tapTarget: MIN_TAP_TARGET_IOS_PT,
   spacing: 12,
-  radius: 10,
+  radius: 16, // --radius-md (Organic softens corners)
 };

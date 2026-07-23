@@ -16,7 +16,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { base, colors, groupPalette } from "@/theme";
+import { base, colors, fonts, groupPalette } from "@/theme";
 import { MAX_OS_FONT_SCALE } from "@/theme/accessibility";
 import type { GroupInfo } from "@/hooks/useCartpool";
 import type { RpcResult } from "@/api/rpc";
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: base.spacing,
     paddingTop: base.spacing / 2,
   },
-  headerTitle: { fontWeight: "700", color: colors.accent },
+  headerTitle: { fontFamily: fonts.heading, color: colors.accent },
   headerButton: {
     minHeight: base.tapTarget,
     minWidth: base.tapTarget,

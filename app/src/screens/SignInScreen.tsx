@@ -1,6 +1,6 @@
 // Phone/OTP sign-in (spec §8). Two steps on one screen: enter phone, then
 // enter the 6-digit code. Tap targets and type sizes follow addendum §4.1.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { useAuth } from "@/hooks/useAuth";
 import { DEV_EMAIL_AUTH } from "@/config";
-import { base, colors } from "@/theme";
+import { base, colors, fonts } from "@/theme";
 import { MAX_OS_FONT_SCALE } from "@/theme/accessibility";
 
 // Phone is the shipping method (spec §8). The other two exist only so
@@ -33,6 +33,16 @@ export default function SignInScreen() {
   const [step, setStep] = useState<"phone" | "code">("phone");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // Resend cooldown: a wrong or expired code must never be a dead end, but
+  // free-firing resends would burn through the mailer/SMS rate limits
+  // (Supabase's built-in mailer allows ~2/hour). 30s between sends.
+  const [resendIn, setResendIn] = useState(0);
+
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
 
   const normalizedPhone = () => {
     const digits = phone.replace(/[^\d+]/g, "");
@@ -69,9 +79,11 @@ export default function SignInScreen() {
       mode === "email" ? await sendEmailCode(email.trim()) : await sendCode(normalizedPhone());
     setBusy(false);
     if (error) {
-      setMessage(error.message);
+      setMessage(friendlyAuthError(error.message));
     } else {
       setStep("code");
+      setCode("");
+      setResendIn(30);
       setMessage(
         mode === "email"
           ? "We emailed you a 6-digit code."
@@ -89,7 +101,10 @@ export default function SignInScreen() {
         ? await verifyEmailCode(email.trim(), code.trim())
         : await verifyCode(normalizedPhone(), code.trim());
     setBusy(false);
-    if (error) setMessage(error.message);
+    if (error) {
+      setMessage(friendlyAuthError(error.message));
+      setCode(""); // a rejected code is never right on retry — clear for the next attempt
+    }
     // On success the auth listener in App.tsx swaps to the list screen.
   };
 
@@ -188,19 +203,42 @@ export default function SignInScreen() {
         </Pressable>
 
         {step === "code" && (
-          <Pressable
-            style={styles.linkButton}
-            onPress={() => {
-              setStep("phone");
-              setCode("");
-              setMessage(null);
-            }}
-            accessibilityRole="button"
-          >
-            <Text style={styles.linkText} maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
-              {mode === "phone" ? "Use a different number" : "Use a different email"}
-            </Text>
-          </Pressable>
+          <>
+            {/* A wrong or expired code must not strand the user: fresh code on
+                demand, throttled so retries don't exhaust the send limits. */}
+            <Pressable
+              style={styles.linkButton}
+              onPress={onSend}
+              disabled={busy || resendIn > 0}
+              accessibilityRole="button"
+              accessibilityLabel={
+                resendIn > 0
+                  ? `Send a new code, available in ${resendIn} seconds`
+                  : "Send a new code"
+              }
+            >
+              <Text
+                style={[styles.linkText, (busy || resendIn > 0) && { color: colors.textSecondary }]}
+                maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+              >
+                {resendIn > 0 ? `Send a new code (${resendIn}s)` : "Send a new code"}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={styles.linkButton}
+              onPress={() => {
+                setStep("phone");
+                setCode("");
+                setMessage(null);
+                setResendIn(0);
+              }}
+              accessibilityRole="button"
+            >
+              <Text style={styles.linkText} maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
+                {mode === "phone" ? "Use a different number" : "Use a different email"}
+              </Text>
+            </Pressable>
+          </>
         )}
 
         {/* Dev-only mode switcher (see src/config.ts). Cycles phone -> password
@@ -234,6 +272,21 @@ export default function SignInScreen() {
   );
 }
 
+// Supabase's raw auth errors are accurate but unfriendly; translate the ones
+// people actually hit into instructions rather than diagnoses.
+function friendlyAuthError(raw: string): string {
+  if (/expired|invalid|not found/i.test(raw)) {
+    return "That code didn't match or has expired. Check the newest message we sent, or tap “Send a new code”.";
+  }
+  if (/rate limit|too many/i.test(raw)) {
+    return "Too many codes requested for now. Wait a little while, then tap “Send a new code”.";
+  }
+  if (/network|fetch/i.test(raw)) {
+    return "Couldn't reach the server. Check your connection and try again.";
+  }
+  return raw;
+}
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -244,7 +297,7 @@ const styles = StyleSheet.create({
   card: { gap: base.spacing },
   title: {
     fontSize: 34,
-    fontWeight: "700",
+    fontFamily: fonts.heading,
     color: colors.accent,
     textAlign: "center",
     marginBottom: base.spacing,

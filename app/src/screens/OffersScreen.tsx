@@ -19,7 +19,7 @@ import {
 } from "react-native";
 import type { GroupInfo, Offer, OfferClaim } from "@/hooks/useCartpool";
 import type { RpcResult } from "@/api/rpc";
-import { base, colors } from "@/theme";
+import { base, colors, fonts } from "@/theme";
 import { MAX_OS_FONT_SCALE } from "@/theme/accessibility";
 
 type Pricing = "free" | "at_cost" | "custom";
@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
     paddingTop: base.spacing * 3,
     paddingBottom: base.spacing,
   },
-  headerTitle: { fontWeight: "700", color: colors.accent },
+  headerTitle: { fontFamily: fonts.heading, color: colors.accent },
   headerButton: { justifyContent: "center", paddingHorizontal: base.spacing },
   formHint: {
     color: colors.textSecondary,

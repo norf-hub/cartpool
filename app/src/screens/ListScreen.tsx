@@ -1,6 +1,9 @@
-// The merged list (spec §2): every group's items in one screen, sections per
-// group with a color tag. Core-loop actions only — add, mark purchased
-// (1 tap, no dialog), unmark (buyer only), edit/remove (adder only).
+// The merged list (spec §2, cross-group model 0013): one unified list. An
+// item you add is visible in every group you're in; the first buyer anywhere
+// clears it everywhere. Sections: "To pick up" (your items someone bought
+// for you, buyer shown), open items, then purchase history. Core-loop
+// actions only — add, mark purchased (1 tap, no dialog), unmark (buyer
+// only), edit/remove (adder only).
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -21,10 +24,10 @@ import ChooseGroupsScreen from "@/screens/ChooseGroupsScreen";
 import GroupsScreen from "@/screens/GroupsScreen";
 import OffersScreen from "@/screens/OffersScreen";
 import ShareScreen from "@/screens/ShareScreen";
-import { base, colors, groupPalette } from "@/theme";
+import { base, colors, fonts, groupPalette } from "@/theme";
 import { LARGE_TEXT_SCALE, MAX_OS_FONT_SCALE } from "@/theme/accessibility";
 
-type Section = { groupId: string; color: string; title: string; data: Item[] };
+type Section = { key: string; color: string; title: string; data: Item[] };
 
 // getInitialURL keeps returning the launch URL for the whole app run, so a
 // remount (sign out and back in) would re-open the share view with a stale
@@ -37,7 +40,6 @@ export default function ListScreen({ userId }: { userId: string }) {
   const [draft, setDraft] = useState("");
   const [draftBulk, setDraftBulk] = useState(false);
   const [draftNote, setDraftNote] = useState("");
-  const [targetGroup, setTargetGroup] = useState<string | null>(null);
   const [editing, setEditing] = useState<Item | null>(null);
   // Note editing reuses the inline note input rather than a dialog:
   // Alert.prompt is iOS-only, and a second modal path would drift from the
@@ -75,8 +77,20 @@ export default function ListScreen({ userId }: { userId: string }) {
   // (addendum §4.1). OS font scaling stacks on top, capped at 2.0.
   const s = cp.profile?.large_text_mode ? LARGE_TEXT_SCALE : 1;
 
-  const groupColor = (groupId: string) =>
-    groupPalette[cp.groups.findIndex((g) => g.id === groupId) % groupPalette.length];
+  // Everyone whose items can appear on my list (me + every groupmate),
+  // stable order: me first, then by name. Drives the per-person row colors
+  // that replaced the per-group ones.
+  const pool: string[] = useMemo(() => {
+    const others = [...new Set(cp.groups.flatMap((g) => g.memberIds))]
+      .filter((id) => id !== userId)
+      .sort((a, b) => cp.nameOf(a).localeCompare(cp.nameOf(b)));
+    return [userId, ...others];
+  }, [cp.groups, cp.names, userId]);
+
+  const personColor = (id: string | null) => {
+    const i = id ? pool.indexOf(id) : -1;
+    return groupPalette[(i < 0 ? 0 : i) % groupPalette.length];
+  };
 
   const groupTitle = (groupId: string) => {
     const g = cp.groups.find((x) => x.id === groupId);
@@ -85,31 +99,39 @@ export default function ListScreen({ userId }: { userId: string }) {
     return others.length === 0 ? "My list" : `With ${others.join(", ")}`;
   };
 
-  const sections: Section[] = useMemo(
-    () =>
-      cp.groups.map((g) => {
-        const inGroup = cp.items.filter((i) => i.group_id === g.id);
-        const open = inGroup.filter((i) => i.status === "open");
-        const purchased = inGroup
-          .filter((i) => i.status === "purchased")
-          .sort((a, b) => (b.purchased_at ?? "").localeCompare(a.purchased_at ?? ""));
-        return {
-          groupId: g.id,
-          color: groupColor(g.id),
-          title: groupTitle(g.id),
-          data: [...open, ...purchased],
-        };
-      }),
-    [cp.groups, cp.items, cp.names]
-  );
+  // Cross-group model: one unified list, not per-group sections.
+  //   1. To pick up — my items someone else bought for me (buyer on the row).
+  //   2. Shopping list — every open item I can see.
+  //   3. Bought — the rest of the purchase history.
+  const sections: Section[] = useMemo(() => {
+    const byNewest = (a: Item, b: Item) =>
+      (b.purchased_at ?? "").localeCompare(a.purchased_at ?? "");
+    const pickup = cp.items
+      .filter(
+        (i) => i.status === "purchased" && i.added_by === userId && i.purchased_by !== userId
+      )
+      .sort(byNewest);
+    const open = cp.items.filter((i) => i.status === "open");
+    const history = cp.items
+      .filter(
+        (i) =>
+          i.status === "purchased" && !(i.added_by === userId && i.purchased_by !== userId)
+      )
+      .sort(byNewest);
+    const out: Section[] = [];
+    if (pickup.length > 0)
+      out.push({ key: "pickup", color: colors.accent, title: "To pick up", data: pickup });
+    out.push({ key: "open", color: colors.accent, title: "Shopping list", data: open });
+    if (history.length > 0)
+      out.push({ key: "done", color: colors.purchased, title: "Bought", data: history });
+    return out;
+  }, [cp.items, userId]);
 
-  // New items can only target writable groups; read-only ones stay visible
-  // in the list but leave the picker (the server would reject the add anyway).
+  // Cross-group model: an item's home group no longer decides who sees it,
+  // so there's nothing for the user to pick — new items go to the first
+  // writable group and appear everywhere anyway.
   const writableGroups = cp.groups.filter((g) => !cp.isGroupReadOnly(g.id));
-  const activeGroup =
-    targetGroup && writableGroups.some((g) => g.id === targetGroup)
-      ? targetGroup
-      : writableGroups[0]?.id ?? null;
+  const activeGroup = writableGroups[0]?.id ?? null;
 
   const submitDraft = async () => {
     const text = draft.trim();
@@ -192,10 +214,11 @@ export default function ListScreen({ userId }: { userId: string }) {
     }
   };
 
+  // Cross-group model: anyone who shares a group with me is a candidate, not
+  // just the item's home group (the server checks against the adder's pool).
   const assignTargets = (item: Item): { id: string; name: string }[] => {
-    const g = cp.groups.find((x) => x.id === item.group_id);
     const already = new Set((cp.optIns[item.id] ?? []).map((o) => o.user_id));
-    return (g?.memberIds ?? [])
+    return pool
       .filter((id) => id !== userId && !already.has(id))
       .map((id) => ({ id, name: cp.nameOf(id) }));
   };
@@ -578,60 +601,25 @@ export default function ListScreen({ userId }: { userId: string }) {
         </View>
       )}
 
-      {/* Which group new items go to — only shown when there's a choice. */}
-      {writableGroups.length > 1 && !editing && (
-        <View style={styles.groupPicker}>
-          {writableGroups.map((g) => (
-            <Pressable
-              key={g.id}
-              onPress={() => setTargetGroup(g.id)}
-              style={[
-                styles.groupChip,
-                { minHeight: base.tapTarget * s, borderColor: groupColor(g.id) },
-                activeGroup === g.id && { backgroundColor: groupColor(g.id) },
-              ]}
-              accessibilityRole="button"
-            >
-              <Text
-                style={{
-                  color: activeGroup === g.id ? colors.accentText : groupColor(g.id),
-                  fontSize: base.fontSizeSmall * s,
-                  fontWeight: "600",
-                }}
-                maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
-              >
-                {groupTitle(g.id)}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
-
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.id}
         stickySectionHeadersEnabled={false}
         renderSectionHeader={({ section }) => (
-          <Pressable
-            onPress={() => setManaging(true)}
-            style={[styles.sectionHeader, { minHeight: base.tapTarget * s }]}
-            accessibilityRole="button"
-            accessibilityLabel={`${section.title}. Tap to manage lists and members.`}
-          >
+          <View style={[styles.sectionHeader, { minHeight: base.tapTarget * s }]}>
             <View style={[styles.colorDot, { backgroundColor: section.color }]} />
             <Text
               style={[styles.sectionTitle, { fontSize: base.fontSizeSmall * s }]}
               maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
             >
               {section.title}
-              {cp.isGroupReadOnly(section.groupId) ? "  ·  READ-ONLY" : ""}
             </Text>
-          </Pressable>
+          </View>
         )}
-        renderItem={({ item, section }) => (
+        renderItem={({ item }) => (
           <Row
             item={item}
-            color={(section as Section).color}
+            color={personColor(item.added_by)}
             scale={s}
             nameOf={cp.nameOf}
             optIns={cp.optIns[item.id] ?? []}
@@ -640,6 +628,11 @@ export default function ListScreen({ userId }: { userId: string }) {
             onLongPress={() => onRowLongPress(item)}
             onBulkAction={() => onBulkAction(item)}
             mine={item.added_by === userId}
+            pickup={
+              item.status === "purchased" &&
+              item.added_by === userId &&
+              item.purchased_by !== userId
+            }
           />
         )}
         ListEmptyComponent={
@@ -685,6 +678,7 @@ function Row({
   onLongPress,
   onBulkAction,
   mine,
+  pickup,
 }: {
   item: Item;
   color: string;
@@ -696,6 +690,8 @@ function Row({
   onLongPress: () => void;
   onBulkAction: () => void;
   mine: boolean;
+  /** My item, bought by someone else: show who to pick it up from. */
+  pickup: boolean;
 }) {
   const purchased = item.status === "purchased";
   const myOptIn = optIns.find((o) => o.user_id === userId);
@@ -728,7 +724,9 @@ function Row({
       ]}
       accessibilityRole="button"
       accessibilityLabel={
-        purchased
+        pickup
+          ? `${item.text}, pick up from ${nameOf(item.purchased_by)}.`
+          : purchased
           ? `${item.text}, bought by ${nameOf(item.purchased_by)}. ${
               mine ? "Tap to unmark." : ""
             }`
@@ -766,7 +764,9 @@ function Row({
           style={{ color: colors.textSecondary, fontSize: base.fontSizeSmall * s }}
           maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
         >
-          {purchased
+          {pickup
+            ? `Pick up from ${nameOf(item.purchased_by)}${when(item.purchased_at)}`
+            : purchased
             ? `Bought by ${nameOf(item.purchased_by)}${when(item.purchased_at)}`
             : `For ${nameOf(item.added_by)}`}
           {item.bulk_note ? ` · ${item.bulk_note}` : ""}
@@ -870,7 +870,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: base.spacing,
     paddingTop: base.spacing / 2,
   },
-  headerTitle: { fontWeight: "700", color: colors.accent },
+  headerTitle: { fontFamily: fonts.heading, color: colors.accent },
   headerActions: { flexDirection: "row", alignItems: "center", gap: base.spacing / 2 },
   headerButton: {
     minHeight: base.tapTarget,
@@ -927,20 +927,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: base.spacing,
     color: colors.text,
     backgroundColor: colors.surface,
-  },
-  groupPicker: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: base.spacing / 2,
-    paddingHorizontal: base.spacing,
-    paddingBottom: base.spacing / 2,
-  },
-  groupChip: {
-    borderWidth: 1.5,
-    borderRadius: base.radius,
-    paddingHorizontal: base.spacing,
-    alignItems: "center",
-    justifyContent: "center",
   },
   sectionHeader: {
     flexDirection: "row",

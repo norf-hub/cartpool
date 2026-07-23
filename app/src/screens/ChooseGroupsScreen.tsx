@@ -14,7 +14,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { base, colors, groupPalette } from "@/theme";
+import { base, colors, fonts, groupPalette } from "@/theme";
 import { MAX_OS_FONT_SCALE } from "@/theme/accessibility";
 import type { GroupInfo } from "@/hooks/useCartpool";
 import type { RpcResult } from "@/api/rpc";
@@ -207,7 +207,7 @@ function friendly(code: string): string {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   title: {
-    fontWeight: "700",
+    fontFamily: fonts.heading,
     color: colors.text,
     paddingHorizontal: base.spacing,
     paddingTop: base.spacing,
