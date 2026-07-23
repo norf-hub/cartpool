@@ -58,6 +58,8 @@ export type Profile = {
   id: string;
   display_name: string;
   large_text_mode: boolean;
+  /** False until the user finishes first-run (0015); gates the onboarding UI. */
+  onboarded: boolean;
 };
 
 /**
@@ -363,6 +365,13 @@ export function useCartpool(userId: string | null) {
     setLargeText: (on: boolean) => {
       setProfile((p) => (p ? { ...p, large_text_mode: on } : p));
       return act(() => rpc.setLargeText(on));
+    },
+    /** Set the display name and finish onboarding (0015). Optimistic on both
+     * fields so the flow can advance immediately. */
+    setDisplayName: (name: string) => {
+      const trimmed = name.trim();
+      setProfile((p) => (p ? { ...p, display_name: trimmed, onboarded: true } : p));
+      return act(() => rpc.setDisplayName(trimmed));
     },
     /** The required downgrade pick: exactly 3 group ids (spec §9). */
     chooseKeptGroups: (groupIds: string[]) => act(() => rpc.chooseKeptGroups(groupIds)),

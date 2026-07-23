@@ -1,5 +1,6 @@
 import { ActivityIndicator, StatusBar, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { useState } from "react";
 import { useFonts, Caprasimo_400Regular } from "@expo-google-fonts/caprasimo";
 import {
   Figtree_400Regular,
@@ -8,6 +9,7 @@ import {
 } from "@expo-google-fonts/figtree";
 import { useAuth } from "@/hooks/useAuth";
 import SignInScreen from "@/screens/SignInScreen";
+import WelcomeScreen from "@/screens/WelcomeScreen";
 import MainTabs from "@/screens/MainTabs";
 import { colors, fonts } from "@/theme";
 
@@ -26,6 +28,10 @@ InputAny.defaultProps.style = [{ fontFamily: fonts.body }, InputAny.defaultProps
 
 export default function App() {
   const { userId, loading } = useAuth();
+  // Signed-out users see the welcome intro (onboarding step 0) before the
+  // sign-in form. Session-scoped: "Get started" reveals sign-in and it stays
+  // revealed for the rest of the run.
+  const [getStarted, setGetStarted] = useState(false);
   const [fontsLoaded] = useFonts({
     Caprasimo_400Regular,
     Figtree_400Regular,
@@ -45,8 +51,10 @@ export default function App() {
           </View>
         ) : userId ? (
           <MainTabs userId={userId} />
-        ) : (
+        ) : getStarted ? (
           <SignInScreen />
+        ) : (
+          <WelcomeScreen scale={1} onGetStarted={() => setGetStarted(true)} />
         )}
       </SafeAreaView>
     </SafeAreaProvider>

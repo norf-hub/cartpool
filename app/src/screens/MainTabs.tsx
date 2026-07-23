@@ -16,6 +16,9 @@ import ListScreen from "@/screens/ListScreen";
 import OffersScreen from "@/screens/OffersScreen";
 import ShareScreen from "@/screens/ShareScreen";
 import YouScreen from "@/screens/YouScreen";
+import NameScreen from "@/screens/NameScreen";
+import FirstRunScreen from "@/screens/FirstRunScreen";
+import PaywallSheet from "@/screens/PaywallSheet";
 import { colors } from "@/theme";
 import { LARGE_TEXT_SCALE } from "@/theme/accessibility";
 
@@ -30,6 +33,17 @@ export default function MainTabs({ userId }: { userId: string }) {
   const [tab, setTab] = useState<Tab>("list");
   const [sharing, setSharing] = useState(false);
   const [pendingCode, setPendingCode] = useState<string | null>(null);
+  // Paywall opened from the downgrade screen's "Unlock instead" button.
+  const [paywall, setPaywall] = useState(false);
+  // Onboarding (name → first-run) for a brand-new account. Latched from the
+  // profile's onboarded flag once, then driven locally so the mid-flow
+  // set_display_name (which flips onboarded true) doesn't yank the screen.
+  const [onboardStep, setOnboardStep] = useState<"name" | "firstrun" | null>(null);
+  useEffect(() => {
+    if (cp.profile && !cp.profile.onboarded && onboardStep === null) {
+      setOnboardStep("name");
+    }
+  }, [cp.profile, onboardStep]);
 
   // Large-text mode (addendum §4.1): persisted on the profile row, set via
   // api.set_large_text (0014). cp.setLargeText flips the local profile
@@ -72,6 +86,38 @@ export default function MainTabs({ userId }: { userId: string }) {
     [cp.offers]
   );
 
+  // Onboarding outranks everything for a new account: name yourself, then the
+  // first-run empty-list welcome. Both land in the app when done.
+  if (onboardStep === "name") {
+    return (
+      <NameScreen
+        scale={s}
+        onSubmit={async (name) => {
+          const res = await cp.setDisplayName(name);
+          if (res.ok) setOnboardStep("firstrun");
+          return res;
+        }}
+      />
+    );
+  }
+  if (onboardStep === "firstrun") {
+    return (
+      <FirstRunScreen
+        name={(cp.profile?.display_name ?? "there").split(/\s+/)[0]}
+        scale={s}
+        onAddFirst={() => {
+          setTab("list");
+          setOnboardStep(null);
+        }}
+        onInvite={() => {
+          setOnboardStep(null);
+          setSharing(true);
+        }}
+        onSkip={() => setOnboardStep(null)}
+      />
+    );
+  }
+
   // The downgrade gate outranks every other view (spec §9): while frozen,
   // the account is read-only everywhere and this screen is unescapable —
   // it comes back on every refresh until choose_kept_groups succeeds or a
@@ -80,20 +126,28 @@ export default function MainTabs({ userId }: { userId: string }) {
   // exactly 3, and picking all 3 is then the way out of the freeze.
   if (cp.frozen && cp.groups.length >= 3) {
     return (
-      <ChooseGroupsScreen
-        groups={cp.groups}
-        groupTitle={groupTitle}
-        scale={s}
-        onConfirm={cp.chooseKeptGroups}
-        onResubscribe={() =>
-          // Paywall lands with RevenueCat config (INFRA §5); react-native-
-          // purchases is already a dependency, so this is wiring, not surgery.
-          Alert.alert(
-            "Not available yet",
-            "Purchasing isn't wired up in this build. Pick 3 lists for now — the others come back in full when you unlock unlimited lists later."
-          )
-        }
-      />
+      <>
+        <ChooseGroupsScreen
+          groups={cp.groups}
+          groupTitle={groupTitle}
+          scale={s}
+          onConfirm={cp.chooseKeptGroups}
+          onResubscribe={() => setPaywall(true)}
+        />
+        <PaywallSheet
+          visible={paywall}
+          onClose={() => setPaywall(false)}
+          scale={s}
+          onBuy={() => {
+            // RevenueCat purchase lands with store config (INFRA §5).
+            setPaywall(false);
+            Alert.alert(
+              "Not available yet",
+              "Purchasing isn't wired up in this build. Pick 3 lists for now — the others come back when you unlock unlimited lists later."
+            );
+          }}
+        />
+      </>
     );
   }
 

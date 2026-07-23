@@ -82,6 +82,36 @@ describe("api wrappers bind identity to auth.uid()", () => {
     ).rejects.toThrow(/permission denied/);
   });
 
+  it("set_display_name (0015): sets only the caller's name + onboarded; internal surface locked", async () => {
+    const [a, b] = [await mkUser("a"), await mkUser("b")];
+
+    const r = await asUser(a, async (c) => {
+      const { rows } = await c.query(`select api.set_display_name('Rosa') as r`);
+      return rows[0].r;
+    });
+    expect(r.ok).toBe(true);
+
+    const rows = (
+      await q(`select id, display_name, onboarded from users where id = any($1)`, [[a, b]])
+    ).rows;
+    const rowOf = (u: string) => rows.find((x) => x.id === u)!;
+    expect(rowOf(a).display_name).toBe("Rosa");
+    expect(rowOf(a).onboarded).toBe(true); // naming completes onboarding
+    expect(rowOf(b).display_name).not.toBe("Rosa"); // no one else touched
+
+    // Empty names are rejected, not stored.
+    const empty = await asUser(a, async (c) => {
+      const { rows: rr } = await c.query(`select api.set_display_name('   ') as r`);
+      return rr[0].r;
+    });
+    expect(empty).toMatchObject({ ok: false, error: "empty_name" });
+
+    // The parameterized core can't be used to rename someone else.
+    await expect(
+      asUser(b, (c) => c.query(`select public.set_display_name($1, 'Mallory')`, [a]))
+    ).rejects.toThrow(/permission denied/);
+  });
+
   it("clients cannot write tables directly", async () => {
     const a = await mkUser("a");
     const g = await mkGroupWith([a]);

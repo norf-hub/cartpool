@@ -48,6 +48,10 @@ export const createInvite = (
  * accessibility settings stay writable even for frozen accounts. */
 export const setLargeText = (on: boolean) => call("set_large_text", { p_on: on });
 
+/** Set the display name and complete onboarding (0015). */
+export const setDisplayName = (name: string) =>
+  call("set_display_name", { p_name: name });
+
 /** Own full profile — the only way to read your own phone number/settings. */
 export async function myProfile() {
   const { data, error } = await api().rpc("my_profile");
