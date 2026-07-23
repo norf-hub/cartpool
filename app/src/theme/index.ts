@@ -16,6 +16,7 @@ export const colors = {
   // RN has no color-mix(): --color-text @55% ≈ neutral-600, used for muted text.
   textSecondary: "#82796a", // --color-neutral-600
   accent: "#c67139", // --color-accent (terracotta)
+  accent2: "#728157", // --color-accent-2-600 (sage) — checkmarks, hero fill kin
   // Text/icons drawn ON the accent fill. Organic uses the cream bg here; we
   // use white for a stronger contrast on small controls (a11y is a hard
   // constraint for this audience).

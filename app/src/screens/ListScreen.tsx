@@ -18,6 +18,9 @@ import {
 } from "react-native";
 import { type BulkOptIn, type Cartpool, type Item } from "@/hooks/useCartpool";
 import ListHero from "@/screens/ListHero";
+import ItemActionSheet from "@/screens/ItemActionSheet";
+import PaywallSheet from "@/screens/PaywallSheet";
+import TrialBanner from "@/components/TrialBanner";
 import { base, colors, fonts, groupPalette } from "@/theme";
 import { MAX_OS_FONT_SCALE } from "@/theme/accessibility";
 
@@ -44,6 +47,10 @@ export default function ListScreen({
   // Alert.prompt is iOS-only, and a second modal path would drift from the
   // add-bar behaviour.
   const [noteEditing, setNoteEditing] = useState<Item | null>(null);
+  // Long-press opens the action sheet on this item (replaces the Alert menu).
+  const [actionItem, setActionItem] = useState<Item | null>(null);
+  // Paywall sheet: opened by the trial banner (and later a real purchase CTA).
+  const [paywall, setPaywall] = useState(false);
 
   // First name for the hero greeting; falls back gracefully pre-profile-load.
   const heroName = (cp.profile?.display_name ?? "there").split(/\s+/)[0];
@@ -198,77 +205,56 @@ export default function ListScreen({
       .map((id) => ({ id, name: cp.nameOf(id) }));
   };
 
+  // Long-press opens the action sheet — but only when there's actually
+  // something to do (adder actions, or buyer's retroactive assignment).
   const onRowLongPress = (item: Item) => {
-    const actions: { text: string; style?: "destructive" | "cancel"; onPress?: () => void }[] =
-      [];
-    if (item.added_by === userId) {
-      // Only the adder edits/removes (spec §4).
-      actions.push({
-        text: "Edit text",
-        onPress: () => {
-          setEditing(item);
-          setDraft(item.text);
-        },
-      });
-      // Bulk is settable after the fact (0010), not just at add time.
-      if (!item.is_bulk) {
-        actions.push({
-          text: "Make this a bulk item",
-          onPress: async () => {
-            const res = await cp.setItemBulk(item.id, true);
-            if (!res.ok) Alert.alert("Couldn't change it", friendlyError(res.error));
-          },
-        });
-      } else {
-        actions.push({
-          text: item.bulk_note ? "Edit bulk note" : "Add a bulk note",
-          onPress: () => promptNote(item),
-        });
-        actions.push({
-          text: "Make this a regular item",
-          onPress: async () => {
-            const res = await cp.setItemBulk(item.id, false);
-            if (!res.ok) Alert.alert("Couldn't change it", friendlyError(res.error));
-          },
-        });
-      }
-      actions.push({
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          const res = await cp.removeItem(item.id);
-          if (!res.ok) Alert.alert("Couldn't remove", friendlyError(res.error));
-        },
-      });
-    }
-    // Retroactive assignment: buyer only, purchased bulk items only (spec §5).
-    if (item.is_bulk && item.status === "purchased" && item.purchased_by === userId) {
-      const targets = assignTargets(item);
-      if (targets.length > 0) {
-        actions.push({
-          text: "Add someone to this bulk item",
-          onPress: () =>
-            Alert.alert(
-              "Who shared it?",
-              "They'll be marked in on this item.",
-              [
-                ...targets.map((t) => ({
-                  text: t.name,
-                  onPress: async () => {
-                    const res = await cp.bulkAssign(item.id, t.id);
-                    if (!res.ok) Alert.alert("Couldn't add them", friendlyError(res.error));
-                  },
-                })),
-                { text: "Cancel", style: "cancel" as const },
-              ]
-            ),
-        });
-      }
-    }
-    if (actions.length === 0) return;
-    actions.push({ text: "Cancel", style: "cancel" });
-    Alert.alert(item.text, undefined, actions);
+    const canAssign =
+      item.is_bulk &&
+      item.status === "purchased" &&
+      item.purchased_by === userId &&
+      assignTargets(item).length > 0;
+    if (item.added_by !== userId && !canAssign) return;
+    setActionItem(item);
   };
+
+  // Handlers behind the action sheet's buttons. Each shows its own error
+  // Alert; the sheet closes itself before invoking them (see ItemActionSheet).
+  const itemActions = {
+    onEditText: (item: Item) => {
+      setEditing(item);
+      setDraft(item.text);
+    },
+    onMakeBulk: async (item: Item) => {
+      const res = await cp.setItemBulk(item.id, true);
+      if (!res.ok) Alert.alert("Couldn't change it", friendlyError(res.error));
+    },
+    onMakeRegular: async (item: Item) => {
+      const res = await cp.setItemBulk(item.id, false);
+      if (!res.ok) Alert.alert("Couldn't change it", friendlyError(res.error));
+    },
+    onEditNote: (item: Item) => promptNote(item),
+    onRemove: async (item: Item) => {
+      const res = await cp.removeItem(item.id);
+      if (!res.ok) Alert.alert("Couldn't remove", friendlyError(res.error));
+    },
+    onAssign: async (item: Item, targetId: string) => {
+      const res = await cp.bulkAssign(item.id, targetId);
+      if (!res.ok) Alert.alert("Couldn't add them", friendlyError(res.error));
+    },
+  };
+
+  // Show the trial strip whenever the account hasn't bought the lifetime
+  // unlock. Text mirrors the mockup: days left while the free period runs,
+  // else a plain nudge. (Frozen accounts never reach this screen — the
+  // downgrade gate in MainTabs outranks it.)
+  const sub = cp.subscription;
+  const trialMsLeft = sub ? new Date(sub.trial_ends_at).getTime() - Date.now() : 0;
+  const trialDays = Math.max(0, Math.ceil(trialMsLeft / 86_400_000));
+  const showTrial = !!sub && !sub.entitlement_active;
+  const trialText =
+    trialDays > 0
+      ? `Free trial · ${trialDays} ${trialDays === 1 ? "day" : "days"} left`
+      : "Free plan · up to 3 lists";
 
   return (
     <KeyboardAvoidingView
@@ -422,15 +408,20 @@ export default function ListScreen({
         keyExtractor={(item) => item.id}
         stickySectionHeadersEnabled={false}
         ListHeaderComponent={
-          <ListHero
-            youName={heroName}
-            groupCount={cp.groups.length}
-            pickup={heroPickup}
-            buyerName={heroPickup ? cp.nameOf(heroPickup.purchased_by) : ""}
-            whenText={heroPickup ? when(heroPickup.purchased_at) : ""}
-            scale={s}
-            onPress={() => heroPickup && onRowTap(heroPickup)}
-          />
+          <>
+            {showTrial && (
+              <TrialBanner text={trialText} scale={s} onPress={() => setPaywall(true)} />
+            )}
+            <ListHero
+              youName={heroName}
+              groupCount={cp.groups.length}
+              pickup={heroPickup}
+              buyerName={heroPickup ? cp.nameOf(heroPickup.purchased_by) : ""}
+              whenText={heroPickup ? when(heroPickup.purchased_at) : ""}
+              scale={s}
+              onPress={() => heroPickup && onRowTap(heroPickup)}
+            />
+          </>
         }
         renderSectionHeader={({ section }) => (
           <View style={[styles.sectionHeader, { minHeight: base.tapTarget * s }]}>
@@ -489,6 +480,37 @@ export default function ListScreen({
           )
         }
         contentContainerStyle={{ paddingBottom: base.spacing * 4 }}
+      />
+
+      <ItemActionSheet
+        item={actionItem}
+        isMine={actionItem?.added_by === userId}
+        assignTargets={
+          actionItem &&
+          actionItem.is_bulk &&
+          actionItem.status === "purchased" &&
+          actionItem.purchased_by === userId
+            ? assignTargets(actionItem)
+            : []
+        }
+        actions={itemActions}
+        scale={s}
+        onClose={() => setActionItem(null)}
+      />
+
+      <PaywallSheet
+        visible={paywall}
+        onClose={() => setPaywall(false)}
+        scale={s}
+        onBuy={() => {
+          // RevenueCat purchase lands with store config (INFRA §5);
+          // react-native-purchases is already a dependency, so this is wiring.
+          setPaywall(false);
+          Alert.alert(
+            "Not available yet",
+            "Purchasing isn't wired up in this build. Your free trial keeps unlimited lists working in the meantime."
+          );
+        }}
       />
     </KeyboardAvoidingView>
   );
