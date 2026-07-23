@@ -44,6 +44,10 @@ export const createInvite = (
     p_target: target ?? null,
   });
 
+/** Persist the in-app large-text toggle (0014). Not gated by read-only —
+ * accessibility settings stay writable even for frozen accounts. */
+export const setLargeText = (on: boolean) => call("set_large_text", { p_on: on });
+
 /** Own full profile — the only way to read your own phone number/settings. */
 export async function myProfile() {
   const { data, error } = await api().rpc("my_profile");

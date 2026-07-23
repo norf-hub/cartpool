@@ -59,6 +59,29 @@ describe("api wrappers bind identity to auth.uid()", () => {
     ).rejects.toThrow(/permission denied/);
   });
 
+  it("set_large_text (0014): writes only the caller's own row; internal surface locked", async () => {
+    const [a, b] = [await mkUser("a"), await mkUser("b")];
+
+    const r = await asUser(a, async (c) => {
+      const { rows } = await c.query(`select api.set_large_text(true) as r`);
+      return rows[0].r;
+    });
+    expect(r.ok).toBe(true);
+
+    const flags = await q(
+      `select id, large_text_mode from users where id = any($1) order by id`,
+      [[a, b].sort()]
+    );
+    const flagOf = (u: string) => flags.rows.find((x) => x.id === u)!.large_text_mode;
+    expect(flagOf(a)).toBe(true); // caller's row flipped
+    expect(flagOf(b)).toBe(false); // no one else's
+
+    // The parameterized core can't be used to flip someone else's setting.
+    await expect(
+      asUser(b, (c) => c.query(`select public.set_large_text($1, true)`, [a]))
+    ).rejects.toThrow(/permission denied/);
+  });
+
   it("clients cannot write tables directly", async () => {
     const a = await mkUser("a");
     const g = await mkGroupWith([a]);

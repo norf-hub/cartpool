@@ -358,6 +358,12 @@ export function useCartpool(userId: string | null) {
       act(() => rpc.bulkAssign(itemId, targetUserId)),
     /** Re-agree to a bulk item whose text changed after my pre-commit. */
     bulkReconfirm: (itemId: string) => act(() => rpc.bulkReconfirm(itemId)),
+    /** Persist the large-text toggle (0014). Optimistic: the UI scale flips
+     * immediately; refresh()/realtime reconciles with the server row. */
+    setLargeText: (on: boolean) => {
+      setProfile((p) => (p ? { ...p, large_text_mode: on } : p));
+      return act(() => rpc.setLargeText(on));
+    },
     /** The required downgrade pick: exactly 3 group ids (spec §9). */
     chooseKeptGroups: (groupIds: string[]) => act(() => rpc.chooseKeptGroups(groupIds)),
     /** Leave a list: open items vanish, purchased get 2-day grace (spec §3). */

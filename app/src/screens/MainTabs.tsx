@@ -31,11 +31,10 @@ export default function MainTabs({ userId }: { userId: string }) {
   const [sharing, setSharing] = useState(false);
   const [pendingCode, setPendingCode] = useState<string | null>(null);
 
-  // Large-text mode: the profile row carries the persisted flag, but there's
-  // no server setter yet (large_text_mode has no RPC — follow-up), so the
-  // You-tab toggle layers a session override on top of it.
-  const [largeTextOverride, setLargeTextOverride] = useState<boolean | null>(null);
-  const largeText = largeTextOverride ?? cp.profile?.large_text_mode ?? false;
+  // Large-text mode (addendum §4.1): persisted on the profile row, set via
+  // api.set_large_text (0014). cp.setLargeText flips the local profile
+  // optimistically, so the scale changes on the spot.
+  const largeText = cp.profile?.large_text_mode ?? false;
   const s = largeText ? LARGE_TEXT_SCALE : 1;
 
   // Invite deep links land here: prefill the join field and open the share
@@ -167,7 +166,7 @@ export default function MainTabs({ userId }: { userId: string }) {
             subscription={cp.subscription}
             scale={s}
             largeText={largeText}
-            onToggleLargeText={(on) => setLargeTextOverride(on)}
+            onToggleLargeText={(on) => cp.setLargeText(on)}
             onSignOut={signOut}
           />
         )}
