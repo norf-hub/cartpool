@@ -176,6 +176,7 @@ create or replace function leave_group(p_group uuid, p_user uuid)
 returns jsonb language plpgsql as $$
 declare
   v_remaining int;
+  c record;
 begin
   update memberships set left_at = now()
   where group_id = p_group and user_id = p_user and left_at is null;
@@ -192,6 +193,24 @@ begin
   -- grace read to future purchases).
   update items set group_id = coalesce(home_group(p_user), group_id)
   where group_id = p_group and added_by = p_user and status = 'open';
+
+  -- Offers (v3.2): close the leaver's open offers; release their claims on
+  -- other members' still-open offers. Carried over from 0012 — the offer
+  -- lifecycle is per-group and unchanged by the cross-group item model.
+  update offers set closed_at = now()
+  where group_id = p_group and posted_by = p_user and closed_at is null;
+
+  for c in
+    select oc.id, oc.offer_id, oc.qty
+    from offer_claims oc
+    join offers o on o.id = oc.offer_id
+    where oc.user_id = p_user and o.group_id = p_group
+      and o.closed_at is null and o.expires_at >= now()
+  loop
+    delete from offer_claims where id = c.id;
+    update offers set qty_remaining = qty_remaining + c.qty
+    where id = c.offer_id;
+  end loop;
 
   select count(*) into v_remaining
   from memberships where group_id = p_group and left_at is null;
@@ -235,6 +254,11 @@ begin
   where source_left_at is not null
     and source_left_at < now() - interval '2 days'
     and home_group(added_by) is null;
+  -- Offers (v3.2): gone 14 days after closing or expiring, whichever came
+  -- first. Carried over from 0012 — dropped by an earlier 0013 rewrite.
+  delete from offers
+  where least(coalesce(closed_at, 'infinity'), expires_at)
+        < now() - interval '14 days';
 end;
 $$;
 

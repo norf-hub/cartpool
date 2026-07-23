@@ -1,12 +1,23 @@
 // Section 6 — Blocking (v3: removal one-directional, co-placement bar bidirectional)
 import { describe, it, expect } from "vitest";
 import { rpc, q } from "./helpers/db";
-import { mkUser, mkGroupWith, addItem, mkInvite, item } from "./helpers/fixtures";
+import {
+  activeGroups,
+  addItem,
+  item,
+  mkGroupWith,
+  mkInvite,
+  mkUser,
+} from "./helpers/fixtures";
 
 type R = { ok: boolean; error?: string };
 
 describe("A blocks B", () => {
-  it("removes A from every shared group (open items vanish); non-shared groups untouched; B unaffected", async () => {
+  // 0013 cross-group model: blocking makes A leave shared groups (via
+  // leave_group), so A's open items there re-home to A's own list rather than
+  // being deleted — and, sharing no group with B any longer, simply stop
+  // being visible to B. Mirrors the leave.test.ts re-home change.
+  it("removes A from every shared group (open items re-home); non-shared groups untouched; B unaffected", async () => {
     const [A, B, C] = [await mkUser("A"), await mkUser("B"), await mkUser("C")];
     const shared = await mkGroupWith([A, B]);
     const unshared = await mkGroupWith([A, C]);
@@ -30,7 +41,12 @@ describe("A blocks B", () => {
     expect(await active(unshared, A)).toBe(true); // only shared groups
     expect(await active(shared, B)).toBe(true); // B is not removed from anything
 
-    expect(await item(aOpenShared)).toBeUndefined(); // vanish rule applied
+    const reHomed = await item(aOpenShared);
+    expect(reHomed.status).toBe("open"); // A keeps their own item
+    expect(reHomed.group_id).not.toBe(shared); // moved off the blocked group
+    // home_group() re-homes to A's OLDEST active group — the solo list every
+    // user gets at signup, not necessarily `unshared`.
+    expect(await activeGroups(A)).toContain(reHomed.group_id);
     expect(await item(aOpenUnshared)).toBeDefined();
     expect((await item(bOpen)).status).toBe("open"); // B's items untouched
   });
