@@ -11,7 +11,11 @@ import {
 } from "./helpers/fixtures";
 
 describe("leaving a group", () => {
-  it("vanishes the leaver's open items for everyone; others' items survive", async () => {
+  // 0013 cross-group model: the leaver's open items are THEIRS — they move
+  // home with them (re-homed group_id) instead of being deleted, and simply
+  // stop being visible to ex-groupmates (visibility keys off shared
+  // membership, tested in cross-group.test.ts). Others' items are untouched.
+  it("re-homes the leaver's open items to their own list; others' items survive", async () => {
     const [a, b] = [await mkUser("leaver"), await mkUser("stayer")];
     const g = await mkGroupWith([a, b]);
     const aOpen = await addItem(g, a, "a-open");
@@ -20,7 +24,9 @@ describe("leaving a group", () => {
     const r = await rpc<{ ok: boolean }>("leave_group", [g, a]);
     expect(r.ok).toBe(true);
 
-    expect(await item(aOpen)).toBeUndefined();
+    const row = await item(aOpen);
+    expect(row.status).toBe("open"); // still on a's own list
+    expect(row.group_id).not.toBe(g); // no longer homed in the left group
     expect((await item(bOpen)).status).toBe("open");
   });
 
@@ -37,15 +43,21 @@ describe("leaving a group", () => {
     expect(row.added_by).toBe(a); // departed member's name still shows
     expect(row.source_left_at).not.toBeNull();
 
-    // Inside the window: purge keeps it.
+    // Inside the window: purge keeps it homed in the old group (buyer view).
     await q(`update items set source_left_at = now() - interval '1 day' where id = $1`, [it1]);
     await rpc("purge_retention");
-    expect(await item(it1)).toBeDefined();
+    row = await item(it1);
+    expect(row).toBeDefined();
+    expect(row.group_id).toBe(g);
 
-    // Past 2 days: purged.
+    // Past 2 days: re-homed to the adder's own list (0013), not deleted —
+    // the old group's members lose the read, the adder keeps their history.
     await q(`update items set source_left_at = now() - interval '3 days' where id = $1`, [it1]);
     await rpc("purge_retention");
-    expect(await item(it1)).toBeUndefined();
+    row = await item(it1);
+    expect(row).toBeDefined();
+    expect(row.group_id).not.toBe(g);
+    expect(row.source_left_at).toBeNull();
   });
 
   it("buyer leaving during the grace period doesn't disturb the purchase record", async () => {

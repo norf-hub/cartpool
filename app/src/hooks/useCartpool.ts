@@ -164,12 +164,15 @@ export function useCartpool(userId: string | null) {
           .select("group_id, user_id")
           .in("group_id", groupIds)
           .is("left_at", null),
+        // 0013: no group filter — RLS scopes items to "shares a group with the
+        // adder" (plus the purchased-grace read), which IS the cross-group
+        // merged list. Filtering by my group ids here would hide items whose
+        // home group I'm not in.
         pub()
           .from("items")
           .select(
             "id, group_id, added_by, text, status, purchased_by, purchased_at, is_bulk, bulk_note, bulk_needs_reconfirm, created_at"
           )
-          .in("group_id", groupIds)
           .neq("status", "removed")
           .order("created_at", { ascending: true }),
         supabase.from("member_profiles").select("id, display_name"),

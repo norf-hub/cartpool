@@ -448,3 +448,91 @@ buyer with extras; this lets them shed the surplus inside their group.
     settled offline.
 -   Non-goals: no payment tracking, no "mark as paid", no cross-group
     or public marketplace. Offers are visible only inside the group.
+
+--------------------------------------------------------------------------
+
+Amendment v3.3 — July 22, 2026: Cross-group items
+
+Supersedes the per-group item model implied throughout §2 and §4, the
+group targeting of new items, and the "open items vanish" leave rule in
+§3. Implemented in migration 0013.
+
+The change in one sentence: an item belongs to its ADDER, not to a
+group — it is one canonical record, automatically visible on the list
+of every group the adder is in, and buying it anywhere clears it
+everywhere.
+
+Visibility (the adder's pool)
+
+-   An item is visible to everyone who shares at least one active group
+    with the person who added it (the adder's "pool"), including the
+    adder themselves. There is no per-group targeting and no group
+    picker: you add an item once and it appears, automatically, on the
+    shared list of every group you belong to.
+-   The pool is evaluated live, not at add time: join a new group and
+    your existing open items appear there too; the reverse on leaving
+    (see below).
+-   Two members of the adder's pool who don't share a group with EACH
+    OTHER both see the adder's items, but still never see one
+    another's. Visibility always chains through the adder, never
+    transitively.
+-   Items retain a "home group" (where they were added) as provenance.
+    It no longer gates visibility of open items; its only user-facing
+    role is the departure grace window below.
+
+Purchase anywhere
+
+-   Any member of the adder's pool — from any of the adder's groups —
+    can mark an open item purchased. Because the item is a single
+    record, the first purchase clears it from every list simultaneously;
+    there is nothing to cascade and no cross-group double-buy state.
+-   The purchase race rule from §4 is unchanged and now spans groups:
+    if two people in different groups buy the same item close together,
+    exactly one wins and the other gets the graceful "already purchased
+    by {name}" state.
+-   Buyer and time are recorded as before; the buyer (and only the
+    buyer) can unmark. Adder-only edit/remove is unchanged.
+-   Write eligibility follows the same subscription rules as before
+    (§9, v3.1): the buyer must share at least one group with the adder
+    in which the buyer can write. Frozen accounts remain read-only
+    everywhere.
+-   Bulk items follow the pool too: opt-in (pre-commit or after
+    purchase) and retroactive assignment by the buyer are open to
+    anyone who shares a group with the adder, not just the home group's
+    members.
+
+The "To pick up" view
+
+-   When someone else buys one of your items, it moves to a "To pick
+    up" section pinned at the top of your list, labeled with who bought
+    it ("Pick up from {name}") and when — you should never have to hunt
+    for who is holding your groceries.
+-   An item leaves the section when the buyer unmarks it (mistake
+    recovery, back to Open) or when you remove it (normal adder-only
+    removal, e.g. once collected and settled).
+-   The main screen is now one unified list rather than per-group
+    sections: To pick up, then open items, then purchase history.
+    Rows keep showing who each item is for.
+
+Leaving a group (revised semantics)
+
+-   Your open items are yours: leaving a group no longer deletes them.
+    They stay on your own list (and on the lists of any groups you
+    remain in); ex-groupmates simply stop seeing them, because
+    visibility follows shared membership.
+-   Purchased items keep the 2-day grace window (§3), reframed: an item
+    of yours already bought by a groupmate stays visible to the old
+    group's members for 2 days — the buyer isn't left holding an
+    untracked, unpaid item — after which it leaves their view but
+    remains in YOUR purchase history instead of being deleted.
+-   Blocking is unchanged (§3): it still works by the blocker leaving
+    shared groups, and inherits these leave semantics.
+
+Non-goals
+
+-   No per-item audience control ("only show this to group X") — that
+    reintroduces the targeting decision this amendment removes. If a
+    request is private to one circle, that's what separate accounts or
+    a future phase-2 idea is for.
+-   No merging of duplicate wants across adders (§4 rule stands: same
+    item wanted by two people = two rows).

@@ -1,7 +1,7 @@
 # Cartpool
 
 Shared shopping lists for small groups (max 4), with bulk-item splitting.
-Implements **Product Spec v3** (+ v3.1 monetization amendment) and the
+Implements **Product Spec v3** (+ amendments through v3.3 — cross-group items) and the
 Technical Addendum: React Native (Expo) client, Supabase (Postgres + Realtime)
 backend, RevenueCat for the one-time unlock purchase.
 
@@ -25,6 +25,7 @@ supabase/
   migrations/0006_push_and_signup.sql  push_tokens + registration RPCs; auth.users signup trigger
   migrations/0011_one_time_purchase.sql  v3.1: trial_ends_at, is_entitled(), expire_trials() cron, purchase+refund-only lifecycle
   migrations/0012_offers.sql     v3.2: "up for grabs" — post surplus units, per-unit accumulating claims, price-as-label
+  migrations/0013_cross_group_items.sql  Cross-group items: one canonical row visible to the adder's whole pool; first buyer anywhere clears it everywhere; leave re-homes instead of deleting
   functions/revenuecat-webhook/  Edge function -> handle_entitlement_event (service_role)
   functions/send-push/           Purchase push fan-out with §4.2 per-group stacking
 tests/                  Section 6 unit tests + auth tests (vitest + pg, real Postgres)
