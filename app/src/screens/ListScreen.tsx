@@ -17,6 +17,7 @@ import {
   View,
 } from "react-native";
 import { type BulkOptIn, type Cartpool, type Item } from "@/hooks/useCartpool";
+import ListHero from "@/screens/ListHero";
 import { base, colors, fonts, groupPalette } from "@/theme";
 import { MAX_OS_FONT_SCALE } from "@/theme/accessibility";
 
@@ -44,6 +45,9 @@ export default function ListScreen({
   // add-bar behaviour.
   const [noteEditing, setNoteEditing] = useState<Item | null>(null);
 
+  // First name for the hero greeting; falls back gracefully pre-profile-load.
+  const heroName = (cp.profile?.display_name ?? "there").split(/\s+/)[0];
+
   // Everyone whose items can appear on my list (me + every groupmate),
   // stable order: me first, then by name. Drives the per-person row colors
   // that replaced the per-group ones.
@@ -59,18 +63,28 @@ export default function ListScreen({
     return groupPalette[(i < 0 ? 0 : i) % groupPalette.length];
   };
 
-  // Cross-group model: one unified list, not per-group sections.
-  //   1. To pick up — my items someone else bought for me (buyer on the row).
-  //   2. Shopping list — every open item I can see.
-  //   3. Bought — the rest of the purchase history.
+  // Cross-group model: one unified list (mockup layout).
+  //   • The most recent pickup — my item someone else bought for me — becomes
+  //     the "Waiting for you" hero at the top (see ListHero).
+  //   • Still open — every open item I can see.
+  //   • Recently bought — the rest of the purchase history.
+  // Any extra pickups beyond the featured one (rare) get their own section so
+  // nothing is hidden.
+  const byNewest = (a: Item, b: Item) =>
+    (b.purchased_at ?? "").localeCompare(a.purchased_at ?? "");
+
+  const pickups = useMemo(
+    () =>
+      cp.items
+        .filter(
+          (i) => i.status === "purchased" && i.added_by === userId && i.purchased_by !== userId
+        )
+        .sort(byNewest),
+    [cp.items, userId]
+  );
+  const heroPickup = pickups[0] ?? null;
+
   const sections: Section[] = useMemo(() => {
-    const byNewest = (a: Item, b: Item) =>
-      (b.purchased_at ?? "").localeCompare(a.purchased_at ?? "");
-    const pickup = cp.items
-      .filter(
-        (i) => i.status === "purchased" && i.added_by === userId && i.purchased_by !== userId
-      )
-      .sort(byNewest);
     const open = cp.items.filter((i) => i.status === "open");
     const history = cp.items
       .filter(
@@ -79,13 +93,14 @@ export default function ListScreen({
       )
       .sort(byNewest);
     const out: Section[] = [];
-    if (pickup.length > 0)
-      out.push({ key: "pickup", color: colors.accent, title: "To pick up", data: pickup });
-    out.push({ key: "open", color: colors.accent, title: "Shopping list", data: open });
+    const extraPickups = pickups.slice(1);
+    if (extraPickups.length > 0)
+      out.push({ key: "pickup", color: colors.accent, title: "Also waiting for you", data: extraPickups });
+    out.push({ key: "open", color: colors.accent, title: "Still open", data: open });
     if (history.length > 0)
-      out.push({ key: "done", color: colors.purchased, title: "Bought", data: history });
+      out.push({ key: "done", color: colors.purchased, title: "Recently bought", data: history });
     return out;
-  }, [cp.items, userId]);
+  }, [cp.items, userId, pickups]);
 
   // Cross-group model: an item's home group no longer decides who sees it,
   // so there's nothing for the user to pick — new items go to the first
@@ -260,14 +275,8 @@ export default function ListScreen({
       style={styles.root}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* The old header action row (Lists / Extras / Share / Sign out) moved
-          into the tab bar and the You tab; the List tab keeps just the title. */}
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { fontSize: base.fontSizeTitle * s }]}
-          maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
-          Cartpool
-        </Text>
-      </View>
+      {/* The title/greeting now lives in the scrollable hero (ListHero) below;
+          the old header action row moved into the tab bar and the You tab. */}
 
       {/* Queued behind a full group — promotion is automatic and FCFS, so
           this is informational, not an action (spec §3). */}
@@ -412,6 +421,17 @@ export default function ListScreen({
         sections={sections}
         keyExtractor={(item) => item.id}
         stickySectionHeadersEnabled={false}
+        ListHeaderComponent={
+          <ListHero
+            youName={heroName}
+            groupCount={cp.groups.length}
+            pickup={heroPickup}
+            buyerName={heroPickup ? cp.nameOf(heroPickup.purchased_by) : ""}
+            whenText={heroPickup ? when(heroPickup.purchased_at) : ""}
+            scale={s}
+            onPress={() => heroPickup && onRowTap(heroPickup)}
+          />
+        }
         renderSectionHeader={({ section }) => (
           <View style={[styles.sectionHeader, { minHeight: base.tapTarget * s }]}>
             <View style={[styles.colorDot, { backgroundColor: section.color }]} />
@@ -670,14 +690,6 @@ function friendlyError(code: string): string {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: base.spacing,
-    paddingTop: base.spacing / 2,
-  },
-  headerTitle: { fontFamily: fonts.heading, color: colors.accent },
   errorBanner: {
     color: colors.danger,
     paddingHorizontal: base.spacing,

@@ -23,6 +23,12 @@ export const colors = {
   danger: "#9e2f1a", // warm red that sits in the Organic family
   border: "#dcd3c4", // --color-neutral-300 (~ --color-divider)
   purchased: "#a19786", // --color-neutral-500
+  // The List "Waiting for you" hero (mockup): sage fill with cream text.
+  heroBg: "#728157", // --color-accent-2-600
+  heroText: "#f5ead8", // cream, same as bg
+  // The trial banner strip above the hero.
+  trialBg: "#fff2eb", // --color-accent-100
+  trialText: "#643312", // --color-accent-800
 };
 
 // Per-person color tags for the merged cross-group list (v3.3). Drawn from
