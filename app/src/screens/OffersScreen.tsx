@@ -42,7 +42,8 @@ type Props = {
   onClaim: (offerId: string, qty: number) => Promise<RpcResult<{ qty_remaining: number }>>;
   onUnclaim: (offerId: string, qty?: number) => Promise<RpcResult>;
   onCloseOffer: (offerId: string) => Promise<RpcResult>;
-  onClose: () => void;
+  /** Overlay mode: show a Done button. Absent when living in the tab bar. */
+  onClose?: () => void;
 };
 
 const money = (cents: number) =>
@@ -138,19 +139,21 @@ export default function OffersScreen(p: Props) {
         >
           Up for grabs
         </Text>
-        <Pressable
-          onPress={p.onClose}
-          style={[styles.headerButton, { minHeight: base.tapTarget * s }]}
-          accessibilityRole="button"
-          accessibilityLabel="Back to the list"
-        >
-          <Text
-            style={{ color: colors.accent, fontSize: base.fontSize * s, fontWeight: "700" }}
-            maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+        {p.onClose && (
+          <Pressable
+            onPress={p.onClose}
+            style={[styles.headerButton, { minHeight: base.tapTarget * s }]}
+            accessibilityRole="button"
+            accessibilityLabel="Back to the list"
           >
-            Done
-          </Text>
-        </Pressable>
+            <Text
+              style={{ color: colors.accent, fontSize: base.fontSize * s, fontWeight: "700" }}
+              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+            >
+              Done
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: base.spacing * 4 }}>

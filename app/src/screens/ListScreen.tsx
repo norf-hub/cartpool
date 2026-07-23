@@ -4,11 +4,10 @@
 // for you, buyer shown), open items, then purchase history. Core-loop
 // actions only — add, mark purchased (1 tap, no dialog), unmark (buyer
 // only), edit/remove (adder only).
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   SectionList,
@@ -17,26 +16,25 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { parseInviteUrl } from "@/lib/links";
-import { useAuth } from "@/hooks/useAuth";
-import { useCartpool, type BulkOptIn, type Item } from "@/hooks/useCartpool";
-import ChooseGroupsScreen from "@/screens/ChooseGroupsScreen";
-import GroupsScreen from "@/screens/GroupsScreen";
-import OffersScreen from "@/screens/OffersScreen";
-import ShareScreen from "@/screens/ShareScreen";
+import { type BulkOptIn, type Cartpool, type Item } from "@/hooks/useCartpool";
 import { base, colors, fonts, groupPalette } from "@/theme";
-import { LARGE_TEXT_SCALE, MAX_OS_FONT_SCALE } from "@/theme/accessibility";
+import { MAX_OS_FONT_SCALE } from "@/theme/accessibility";
 
 type Section = { key: string; color: string; title: string; data: Item[] };
 
-// getInitialURL keeps returning the launch URL for the whole app run, so a
-// remount (sign out and back in) would re-open the share view with a stale
-// code. Module-level because the consumption must outlive the component.
-let consumedInitialUrl: string | null = null;
-
-export default function ListScreen({ userId }: { userId: string }) {
-  const { signOut } = useAuth();
-  const cp = useCartpool(userId);
+export default function ListScreen({
+  cp,
+  userId,
+  scale: s,
+  onOpenShare,
+}: {
+  /** Shared client state — the tab shell owns the single instance. */
+  cp: Cartpool;
+  userId: string;
+  scale: number;
+  /** Opens the share/join overlay (owned by the shell). */
+  onOpenShare: () => void;
+}) {
   const [draft, setDraft] = useState("");
   const [draftBulk, setDraftBulk] = useState(false);
   const [draftNote, setDraftNote] = useState("");
@@ -45,37 +43,6 @@ export default function ListScreen({ userId }: { userId: string }) {
   // Alert.prompt is iOS-only, and a second modal path would drift from the
   // add-bar behaviour.
   const [noteEditing, setNoteEditing] = useState<Item | null>(null);
-  const [sharing, setSharing] = useState(false);
-  const [managing, setManaging] = useState(false);
-  const [grabbing, setGrabbing] = useState(false); // "Up for grabs" view (v3.2)
-  const [pendingCode, setPendingCode] = useState<string | null>(null);
-
-  // Invite deep links land here: prefill the join field and open the share
-  // view. Never auto-redeem — the user must actively accept (spec §3).
-  // getInitialURL covers cold start via link (including a link tapped before
-  // sign-in, since this mounts right after auth); the listener covers links
-  // tapped while the app is running.
-  useEffect(() => {
-    const handle = (url: string | null) => {
-      const c = parseInviteUrl(url);
-      if (c) {
-        setPendingCode(c);
-        setSharing(true);
-      }
-    };
-    Linking.getInitialURL().then((url) => {
-      if (url && url !== consumedInitialUrl) {
-        consumedInitialUrl = url;
-        handle(url);
-      }
-    });
-    const sub = Linking.addEventListener("url", (e) => handle(e.url));
-    return () => sub.remove();
-  }, []);
-
-  // In-app large-text toggle: fixed scale on text AND row height together
-  // (addendum §4.1). OS font scaling stacks on top, capped at 2.0.
-  const s = cp.profile?.large_text_mode ? LARGE_TEXT_SCALE : 1;
 
   // Everyone whose items can appear on my list (me + every groupmate),
   // stable order: me first, then by name. Drives the per-person row colors
@@ -90,13 +57,6 @@ export default function ListScreen({ userId }: { userId: string }) {
   const personColor = (id: string | null) => {
     const i = id ? pool.indexOf(id) : -1;
     return groupPalette[(i < 0 ? 0 : i) % groupPalette.length];
-  };
-
-  const groupTitle = (groupId: string) => {
-    const g = cp.groups.find((x) => x.id === groupId);
-    if (!g) return "List";
-    const others = g.memberIds.filter((id) => id !== userId).map((id) => cp.nameOf(id));
-    return others.length === 0 ? "My list" : `With ${others.join(", ")}`;
   };
 
   // Cross-group model: one unified list, not per-group sections.
@@ -295,171 +255,18 @@ export default function ListScreen({ userId }: { userId: string }) {
     Alert.alert(item.text, undefined, actions);
   };
 
-  // The downgrade gate outranks every other view (spec §9): while frozen,
-  // the account is read-only everywhere and this screen is unescapable —
-  // it comes back on every refresh until choose_kept_groups succeeds or a
-  // resubscription clears the flag server-side.
-  // >= 3 not > 3: leaving groups while frozen can shrink the count to
-  // exactly 3, and picking all 3 is then the way out of the freeze.
-  if (cp.frozen && cp.groups.length >= 3) {
-    return (
-      <ChooseGroupsScreen
-        groups={cp.groups}
-        groupTitle={groupTitle}
-        scale={s}
-        onConfirm={cp.chooseKeptGroups}
-        onResubscribe={() =>
-          // Paywall lands with RevenueCat config (INFRA §5); react-native-
-          // purchases is already a dependency, so this is wiring, not surgery.
-          Alert.alert(
-            "Not available yet",
-            "Purchasing isn't wired up in this build. Pick 3 lists for now — the others come back in full when you unlock unlimited lists later."
-          )
-        }
-      />
-    );
-  }
-
-  // No navigator in the app yet (spec's depth budget is shallow enough that
-  // one swap is cheaper than a dependency), so share and manage are
-  // full-screen swaps.
-  if (managing) {
-    return (
-      <GroupsScreen
-        groups={cp.groups}
-        userId={userId}
-        groupTitle={groupTitle}
-        nameOf={cp.nameOf}
-        scale={s}
-        onLeave={cp.leaveGroup}
-        onBlock={cp.blockUser}
-        onClose={() => setManaging(false)}
-      />
-    );
-  }
-
-  if (grabbing) {
-    return (
-      <OffersScreen
-        userId={userId}
-        groups={cp.groups}
-        offers={cp.offers}
-        claims={cp.offerClaims}
-        scale={s}
-        groupTitle={groupTitle}
-        nameOf={cp.nameOf}
-        isGroupReadOnly={cp.isGroupReadOnly}
-        onCreate={cp.createOffer}
-        onClaim={cp.claimOffer}
-        onUnclaim={cp.unclaimOffer}
-        onCloseOffer={cp.closeOffer}
-        onClose={() => setGrabbing(false)}
-      />
-    );
-  }
-
-  if (sharing) {
-    return (
-      <ShareScreen
-        // Remount when a new link arrives so a fresh code replaces a stale one
-        // even if the share view is already open.
-        key={pendingCode ?? "share"}
-        groups={cp.groups}
-        groupTitle={groupTitle}
-        memberCount={(id) => cp.groups.find((g) => g.id === id)?.memberIds.length ?? 0}
-        scale={s}
-        initialCode={pendingCode ?? undefined}
-        onCreateInvite={cp.createInvite}
-        onRedeem={cp.redeemInvite}
-        onClose={() => {
-          setSharing(false);
-          setPendingCode(null);
-        }}
-      />
-    );
-  }
-
   return (
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      {/* The old header action row (Lists / Extras / Share / Sign out) moved
+          into the tab bar and the You tab; the List tab keeps just the title. */}
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { fontSize: base.fontSizeTitle * s }]}
           maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
           Cartpool
         </Text>
-        <View style={styles.headerActions}>
-          <Pressable
-            onPress={() => setManaging(true)}
-            style={styles.headerButton}
-            accessibilityRole="button"
-            accessibilityLabel="Manage your lists and members"
-          >
-            <Text
-              style={{
-                color: colors.textSecondary,
-                fontSize: base.fontSizeSmall * s,
-                fontWeight: "600",
-              }}
-              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
-            >
-              Lists
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setGrabbing(true)}
-            style={styles.headerButton}
-            accessibilityRole="button"
-            accessibilityLabel="Extras up for grabs — post or claim surplus items"
-          >
-            <Text
-              style={{
-                color: cp.offers.length > 0 ? colors.accent : colors.textSecondary,
-                fontSize: base.fontSizeSmall * s,
-                fontWeight: "600",
-              }}
-              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
-            >
-              {cp.offers.length > 0 ? `Extras (${cp.offers.length})` : "Extras"}
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setSharing(true)}
-            style={styles.headerButton}
-            accessibilityRole="button"
-            accessibilityLabel="Invite someone or join a list"
-          >
-            <Text
-              style={{
-                color: colors.accent,
-                fontSize: base.fontSizeSmall * s,
-                fontWeight: "700",
-              }}
-              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
-            >
-              Share
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() =>
-              Alert.alert("Sign out?", undefined, [
-                { text: "Cancel", style: "cancel" },
-                { text: "Sign out", style: "destructive", onPress: () => signOut() },
-              ])
-            }
-            style={styles.headerButton}
-            accessibilityRole="button"
-            accessibilityLabel="Sign out"
-          >
-            <Text
-              style={{ color: colors.textSecondary, fontSize: base.fontSizeSmall * s }}
-              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
-            >
-              Sign out
-            </Text>
-          </Pressable>
-        </View>
       </View>
 
       {/* Queued behind a full group — promotion is automatic and FCFS, so
@@ -642,7 +449,7 @@ export default function ListScreen({ userId }: { userId: string }) {
                 Nothing on the list yet. Add your first item above.
               </Text>
               <Pressable
-                onPress={() => setSharing(true)}
+                onPress={onOpenShare}
                 style={[styles.emptyAction, { minHeight: base.tapTarget * s }]}
                 accessibilityRole="button"
                 accessibilityLabel="Share this list with someone, or join someone else's"
@@ -871,13 +678,6 @@ const styles = StyleSheet.create({
     paddingTop: base.spacing / 2,
   },
   headerTitle: { fontFamily: fonts.heading, color: colors.accent },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: base.spacing / 2 },
-  headerButton: {
-    minHeight: base.tapTarget,
-    minWidth: base.tapTarget,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   errorBanner: {
     color: colors.danger,
     paddingHorizontal: base.spacing,

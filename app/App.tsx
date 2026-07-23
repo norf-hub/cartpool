@@ -8,7 +8,7 @@ import {
 } from "@expo-google-fonts/figtree";
 import { useAuth } from "@/hooks/useAuth";
 import SignInScreen from "@/screens/SignInScreen";
-import ListScreen from "@/screens/ListScreen";
+import MainTabs from "@/screens/MainTabs";
 import { colors, fonts } from "@/theme";
 
 // Organic body font applied app-wide as the default, so screens don't each
@@ -44,7 +44,7 @@ export default function App() {
             <ActivityIndicator size="large" color={colors.accent} />
           </View>
         ) : userId ? (
-          <ListScreen userId={userId} />
+          <MainTabs userId={userId} />
         ) : (
           <SignInScreen />
         )}

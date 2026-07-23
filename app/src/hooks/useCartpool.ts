@@ -388,3 +388,7 @@ export function useCartpool(userId: string | null) {
     closeOffer: (offerId: string) => act(() => rpc.closeOffer(offerId)),
   };
 }
+
+/** The full client-state surface, for screens that receive it as a prop
+ * (the tab shell owns the single useCartpool instance). */
+export type Cartpool = ReturnType<typeof useCartpool>;

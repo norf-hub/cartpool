@@ -30,6 +30,7 @@ export default function GroupsScreen({
   onLeave,
   onBlock,
   onClose,
+  onShare,
 }: {
   groups: GroupInfo[];
   userId: string;
@@ -38,7 +39,10 @@ export default function GroupsScreen({
   scale: number;
   onLeave: (groupId: string) => Promise<RpcResult>;
   onBlock: (targetUserId: string) => Promise<RpcResult>;
-  onClose: () => void;
+  /** Overlay mode: show a Done button. Absent when living in the tab bar. */
+  onClose?: () => void;
+  /** Tab mode: open the share/join overlay. */
+  onShare?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
 
@@ -105,19 +109,40 @@ export default function GroupsScreen({
         >
           Your lists
         </Text>
-        <Pressable
-          onPress={onClose}
-          style={styles.headerButton}
-          accessibilityRole="button"
-          accessibilityLabel="Close"
-        >
-          <Text
-            style={{ color: colors.textSecondary, fontSize: base.fontSizeSmall * s }}
-            maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+        {onShare && (
+          <Pressable
+            onPress={onShare}
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel="Invite someone or join a list"
           >
-            Done
-          </Text>
-        </Pressable>
+            <Text
+              style={{
+                color: colors.accent,
+                fontSize: base.fontSizeSmall * s,
+                fontWeight: "700",
+              }}
+              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+            >
+              Invite / join
+            </Text>
+          </Pressable>
+        )}
+        {onClose && (
+          <Pressable
+            onPress={onClose}
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+          >
+            <Text
+              style={{ color: colors.textSecondary, fontSize: base.fontSizeSmall * s }}
+              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+            >
+              Done
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       {busy && <ActivityIndicator color={colors.accent} />}
