@@ -137,7 +137,46 @@ Docker Desktop can also be quit entirely when you're not testing.
 - **"docker is not recognized"** → Docker Desktop isn't installed, or isn't
   finished starting. Make sure the whale icon shows "Engine running", then
   reopen PowerShell.
-- **Tests fail to connect / "ECONNREFUSED"** → the Postgres container isn't
-  running. Redo step 2b, then 2c.
+- **Tests fail to connect / "ECONNREFUSED"** → usually the Postgres container
+  isn't running: redo step 2b, then 2c. But check the next entry before
+  assuming that — a *running, healthy* database can still be unreachable.
+- **"ECONNREFUSED" while the container is up and healthy** → Windows may have
+  reserved the port, in which case Docker fails to publish it **silently**.
+  Find your database container and check whether its port really is published:
+
+  ```powershell
+  docker ps
+  docker port <paste-the-container-id-here>
+  ```
+
+  You want a line mapping the port to the host: `5432/tcp -> 0.0.0.0:5432` for
+  the container from step 2b, or `-> 0.0.0.0:54322` if you used the
+  `supabase start` route from the README instead. **If it prints nothing**, the
+  port was never published. Confirm why:
+
+  ```powershell
+  netsh interface ipv4 show excludedportrange protocol=tcp
+  ```
+
+  If a listed range covers your port, Windows has claimed it. (It grabs
+  100-port blocks in the 54xxx space; in July 2026 one of them swallowed
+  54321-54323, which broke the `supabase start` route completely while leaving
+  every container healthy.) Free it in an **Administrator** PowerShell —
+  substitute your own port for `54321` — then fully quit and reopen Docker
+  Desktop:
+
+  ```powershell
+  net stop winnat
+  netsh int ipv4 add excludedportrange protocol=tcp startport=54321 numberofports=3 store=persistent
+  net start winnat
+  ```
+
+  Restarting the container does **not** help. On the `supabase start` route,
+  finish with `supabase stop` then `supabase start` — and don't `docker restart`
+  its database container by itself; doing that got it killed (exit 137).
+- **"Test Files no tests"** alongside any of the above → not a separate
+  problem. The database setup in `tests/helpers/setup.ts` runs before Vitest
+  collects anything, so when it throws, zero test files are reported. Fix the
+  connection and the tests reappear.
 - **A test actually fails** (red, with an error message) → copy the failing
   test's name and the error text back to me and I'll help you read it.

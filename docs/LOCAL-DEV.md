@@ -196,6 +196,16 @@ tap, per spec §3.
 Check in order: same Wi-Fi network, IP still correct (`ipconfig` — DHCP
 reassigns these), firewall rule from step 4, `supabase status` shows running.
 
+**Nothing reaches 54321 — not even the PC itself** — if `curl
+http://127.0.0.1:54321/rest/v1/` fails from the PC while `supabase start`
+reported success, Windows has reserved the port and Docker failed to publish it
+without saying so. `docker port supabase_kong_cartpool` printing nothing
+confirms it. See the ECONNREFUSED section of `RUN-TESTS-WALKTHROUGH.md` for the
+`winnat` fix — it clears 54321-54323 in one go, so the app and the test suite
+come back together. Note this is a *different* failure from the firewall in
+step 4: the firewall blocks other devices but leaves `127.0.0.1` working, while
+this breaks the PC too.
+
 **App loads but every list is empty and errors mention permissions** — you're
 likely still pointed at the hosted project, which may not have migrations
 0008/0009 applied. Recheck the URL in `.env`.

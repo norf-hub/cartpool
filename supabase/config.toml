@@ -13,7 +13,11 @@ extra_search_path = ["public"]
 
 [db]
 port = 54322
-major_version = 15
+# Matches what the CLI actually starts (supabase/postgres:17.6.1.147). This
+# said 15 while the stack ran 17, so CLI 2.109.1 evidently doesn't pick the
+# image from it — but a version that did would try to boot 15 against a 17 data
+# volume and fail.
+major_version = 17
 
 [auth]
 enable_signup = true
