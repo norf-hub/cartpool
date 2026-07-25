@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { unregisterCurrentPush } from "@/notifications/push";
 
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
@@ -44,6 +45,13 @@ export function useAuth() {
     signInWithPassword: (email: string, password: string) =>
       supabase.auth.signInWithPassword({ email, password }),
 
-    signOut: () => supabase.auth.signOut(),
+    // Withdraw this device's push token first: api.unregister_push_token
+    // resolves the caller from the live session, so after signOut it would
+    // have no one to act as, and the phone would keep receiving this
+    // account's notifications (§4.2).
+    signOut: async () => {
+      await unregisterCurrentPush();
+      return supabase.auth.signOut();
+    },
   };
 }

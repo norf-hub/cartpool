@@ -9,6 +9,7 @@ import { Alert, Linking, View } from "react-native";
 import { parseInviteUrl } from "@/lib/links";
 import { useAuth } from "@/hooks/useAuth";
 import { useCartpool } from "@/hooks/useCartpool";
+import { usePush } from "@/hooks/usePush";
 import TabBar, { type Tab } from "@/components/TabBar";
 import ChooseGroupsScreen from "@/screens/ChooseGroupsScreen";
 import GroupsScreen from "@/screens/GroupsScreen";
@@ -92,6 +93,16 @@ export default function MainTabs({ userId }: { userId: string }) {
   const openOffers = useMemo(
     () => cp.offers.filter((o) => !o.closed_at && o.qty_remaining > 0).length,
     [cp.offers]
+  );
+
+  // Register this device for push, and keep one Android channel per group so a
+  // big Costco run collapses into a single stack. Lives here because this is
+  // the first thing rendered after sign-in, and because groupTitle gives the
+  // channels the same names the user sees. Must sit above the early returns
+  // below — onboarding and the downgrade gate must not skip registration.
+  usePush(
+    userId,
+    cp.groups.map((g) => ({ id: g.id, title: groupTitle(g.id) }))
   );
 
   // Onboarding outranks everything for a new account: name yourself, then the

@@ -173,8 +173,13 @@ tap, per spec §3.
 
 ### Not testable yet
 
-- **Push notifications** — `registerForPush()` exists but nothing calls it, and
-  Expo Go dropped remote push support anyway. Needs a development build.
+- **Push notifications** — now wired (`usePush` in `MainTabs` registers on
+  sign-in, `signOut` withdraws the token), but still not testable here: Expo Go
+  dropped remote push, so it needs a development build, and
+  `getExpoPushTokenAsync` needs an EAS `projectId` that doesn't exist until
+  INFRA.md step 4. Until then registration logs `[push] registration
+  unavailable` and returns null by design — the app is fully usable without it,
+  so that warning in the Expo console is expected, not a failure.
 - **Subscribing** — the paywall is a stub until RevenueCat is configured
   (INFRA.md step 5).
 - **The pick-3 downgrade screen** — needs a frozen account. The realistic
