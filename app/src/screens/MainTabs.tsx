@@ -40,6 +40,10 @@ export default function MainTabs({ userId }: { userId: string }) {
   const [paywall, setPaywall] = useState(false);
   // Group being named/renamed (0016), or null when the sheet is closed.
   const [renaming, setRenaming] = useState<GroupInfo | null>(null);
+  // Id of a just-created group waiting for the name sheet. Held separately
+  // because createGroup's refresh is async: the group isn't in cp.groups yet
+  // at the moment the RPC returns, and the sheet needs the GroupInfo.
+  const [namingNew, setNamingNew] = useState<string | null>(null);
   // Onboarding (name → first-run) for a brand-new account. Latched from the
   // profile's onboarded flag once, then driven locally so the mid-flow
   // set_display_name (which flips onboarded true) doesn't yank the screen.
@@ -49,6 +53,19 @@ export default function MainTabs({ userId }: { userId: string }) {
       setOnboardStep("name");
     }
   }, [cp.profile, onboardStep]);
+
+  // A new group has no name and no other members, so without this every one
+  // of them reads "Just you". Open the name sheet as soon as the group lands
+  // in state; if it never arrives (offline refresh), nothing happens and the
+  // numbered fallback in groupTitle keeps the labels distinct.
+  useEffect(() => {
+    if (!namingNew) return;
+    const g = cp.groups.find((x) => x.id === namingNew);
+    if (g) {
+      setRenaming(g);
+      setNamingNew(null);
+    }
+  }, [namingNew, cp.groups]);
 
   // Large-text mode (addendum §4.1): persisted on the profile row, set via
   // api.set_large_text (0014). cp.setLargeText flips the local profile
@@ -90,7 +107,14 @@ export default function MainTabs({ userId }: { userId: string }) {
     if (!g) return "Group";
     if (g.name) return g.name;
     const others = g.memberIds.filter((id) => id !== userId).map((id) => cp.nameOf(id));
-    return others.length === 0 ? "Just you" : `With ${others.join(", ")}`;
+    if (others.length > 0) return `With ${others.join(", ")}`;
+    // Every empty group would otherwise be "Just you", which made the Grabs
+    // group picker show identical chips. Naming happens at creation now, so
+    // this is the fallback for a name sheet that got dismissed. The number is
+    // a tiebreaker, not a creation order — cp.groups is sorted by id.
+    const solo = cp.groups.filter((x) => !x.name && x.memberIds.length === 1);
+    if (solo.length > 1) return `Just you (${solo.findIndex((x) => x.id === groupId) + 1})`;
+    return "Just you";
   };
 
   const openOffers = useMemo(
@@ -218,7 +242,13 @@ export default function MainTabs({ userId }: { userId: string }) {
             onBlock={cp.blockUser}
             onShare={() => setSharing(true)}
             onRename={(g) => setRenaming(g)}
-            onCreate={cp.createGroup}
+            onCreate={async () => {
+              const res = await cp.createGroup();
+              // Name it straight away, so two empty groups are never
+              // indistinguishable in the Grabs group picker.
+              if (res.ok) setNamingNew(res.group_id);
+              return res;
+            }}
             // Hitting the free cap is the paywall's natural entry point — the
             // only other way in is the downgrade screen, which a paying-curious
             // user on the free tier never sees.
