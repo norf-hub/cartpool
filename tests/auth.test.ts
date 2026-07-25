@@ -84,6 +84,71 @@ describe("api wrappers bind identity to auth.uid()", () => {
     ).rejects.toThrow(/permission denied/);
   });
 
+  it("set_global_mute (0018): writes only the caller's row; internal surface locked", async () => {
+    const [a, b] = [await mkUser("a"), await mkUser("b")];
+
+    const r = await asUser(a, async (c) => {
+      const { rows } = await c.query(`select api.set_global_mute(true) as r`);
+      return rows[0].r;
+    });
+    expect(r.ok).toBe(true);
+
+    const flags = await q(
+      `select id, global_mute from users where id = any($1)`,
+      [[a, b]]
+    );
+    const muteOf = (u: string) => flags.rows.find((x) => x.id === u)!.global_mute;
+    expect(muteOf(a)).toBe(true);
+    expect(muteOf(b)).toBe(false); // default; nobody else touched
+
+    await expect(
+      asUser(b, (c) => c.query(`select public.set_global_mute($1, true)`, [a]))
+    ).rejects.toThrow(/permission denied/);
+  });
+
+  it("set_group_mute (0018): per-group override, only for groups I'm in", async () => {
+    const [a, b] = [await mkUser("a"), await mkUser("b")];
+    const shared = await mkGroupWith([a, b]);
+    const theirs = await mkGroupWith([b]);
+
+    const mine = await asUser(a, async (c) => {
+      const { rows } = await c.query(`select api.set_group_mute($1, true) as r`, [shared]);
+      return rows[0].r;
+    });
+    expect(mine.ok).toBe(true);
+
+    // a's own membership only — b shares the group but keeps following global.
+    const rows = (
+      await q(`select user_id, mute_override from memberships where group_id = $1`, [shared])
+    ).rows;
+    expect(rows.find((x) => x.user_id === a)!.mute_override).toBe(true);
+    expect(rows.find((x) => x.user_id === b)!.mute_override).toBe(null);
+
+    // Clearing puts the group back on the global setting.
+    const cleared = await asUser(a, async (c) => {
+      const { rows: r } = await c.query(`select api.clear_group_mute($1) as r`, [shared]);
+      return r[0].r;
+    });
+    expect(cleared.ok).toBe(true);
+    expect(
+      (await q(`select mute_override from memberships where group_id=$1 and user_id=$2`, [
+        shared,
+        a,
+      ])).rows[0].mute_override
+    ).toBe(null);
+
+    // A group a isn't in can't be muted — no row to update.
+    const foreign = await asUser(a, async (c) => {
+      const { rows: r } = await c.query(`select api.set_group_mute($1, true) as r`, [theirs]);
+      return r[0].r;
+    });
+    expect(foreign).toMatchObject({ ok: false, error: "not_a_member" });
+
+    await expect(
+      asUser(b, (c) => c.query(`select public.set_group_mute($1, $2, true)`, [a, shared]))
+    ).rejects.toThrow(/permission denied/);
+  });
+
   it("set_display_name (0015): sets only the caller's name + onboarded; internal surface locked", async () => {
     const [a, b] = [await mkUser("a"), await mkUser("b")];
 

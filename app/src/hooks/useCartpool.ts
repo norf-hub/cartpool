@@ -54,12 +54,20 @@ export type GroupInfo = {
   memberIds: string[];
   /** Custom name (0016), or null to use the member-name fallback. */
   name: string | null;
+  /**
+   * My mute override for this group (0018): true/false is explicit, null means
+   * follow the global setting. Only my own row — RLS keeps other members'
+   * choices out of reach, and they're none of my business anyway.
+   */
+  muteOverride: boolean | null;
 };
 
 export type Profile = {
   id: string;
   display_name: string;
   large_text_mode: boolean;
+  /** Silence purchase pushes everywhere unless a group overrides it (0018). */
+  global_mute: boolean;
   /** False until the user finishes first-run (0015); gates the onboarding UI. */
   onboarded: boolean;
 };
@@ -163,9 +171,11 @@ export function useCartpool(userId: string | null) {
       }
 
       const [membersRes, groupsRes, itemsRes, profilesRes, myProfile] = await Promise.all([
+        // mute_override comes back per membership row (0018). RLS limits the
+        // rows to groups I'm in; only my own row's value is used below.
         pub()
           .from("memberships")
-          .select("group_id, user_id")
+          .select("group_id, user_id, mute_override")
           .in("group_id", groupIds)
           .is("left_at", null),
         // Custom group names (0016); null means fall back to member names.
@@ -197,6 +207,10 @@ export function useCartpool(userId: string | null) {
             .map((m) => m.user_id as string),
           name:
             ((groupsRes.data ?? []).find((g) => g.id === id)?.name as string | null) ?? null,
+          // My row only: the toggle reflects my own choice, not a housemate's.
+          muteOverride:
+            ((membersRes.data ?? []).find((m) => m.group_id === id && m.user_id === userId)
+              ?.mute_override as boolean | null | undefined) ?? null,
         }))
       );
       const loadedItems = (itemsRes.data ?? []) as Item[];
@@ -372,6 +386,27 @@ export function useCartpool(userId: string | null) {
     setLargeText: (on: boolean) => {
       setProfile((p) => (p ? { ...p, large_text_mode: on } : p));
       return act(() => rpc.setLargeText(on));
+    },
+    /**
+     * Global notification mute (spec §6, 0018). Optimistic like the other
+     * settings toggles so the switch doesn't lag the tap.
+     */
+    setGlobalMute: (on: boolean) => {
+      setProfile((p) => (p ? { ...p, global_mute: on } : p));
+      return act(() => rpc.setGlobalMute(on));
+    },
+    /**
+     * Per-group mute. `on` null clears the override so the group follows the
+     * global setting again — the three states the 0001 column comment
+     * describes, and the reason this isn't a plain boolean.
+     */
+    setGroupMute: (groupId: string, on: boolean | null) => {
+      setGroups((gs) =>
+        gs.map((g) => (g.id === groupId ? { ...g, muteOverride: on } : g))
+      );
+      return act(() =>
+        on === null ? rpc.clearGroupMute(groupId) : rpc.setGroupMute(groupId, on)
+      );
     },
     /** Set the display name and finish onboarding (0015). Optimistic on both
      * fields so the flow can advance immediately. */

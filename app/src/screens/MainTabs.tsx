@@ -253,6 +253,8 @@ export default function MainTabs({ userId }: { userId: string }) {
             // only other way in is the downgrade screen, which a paying-curious
             // user on the free tier never sees.
             onUpgrade={() => setPaywall(true)}
+            globalMute={cp.profile?.global_mute ?? false}
+            onMute={(groupId, on) => cp.setGroupMute(groupId, on)}
           />
         )}
         {tab === "grabs" && (
@@ -279,6 +281,7 @@ export default function MainTabs({ userId }: { userId: string }) {
             scale={s}
             largeText={largeText}
             onToggleLargeText={(on) => cp.setLargeText(on)}
+            onToggleGlobalMute={(on) => cp.setGlobalMute(on)}
             onSignOut={signOut}
           />
         )}

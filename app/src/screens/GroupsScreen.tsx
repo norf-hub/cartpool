@@ -13,6 +13,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from "react-native";
@@ -34,6 +35,8 @@ export default function GroupsScreen({
   onRename,
   onCreate,
   onUpgrade,
+  globalMute = false,
+  onMute,
 }: {
   groups: GroupInfo[];
   userId: string;
@@ -52,6 +55,10 @@ export default function GroupsScreen({
   onCreate?: () => Promise<RpcResult<{ group_id?: string }>>;
   /** Offer the purchase, called when creating hits the free-tier cap. */
   onUpgrade?: () => void;
+  /** The account-wide mute (spec §6); decides what a per-group switch means. */
+  globalMute?: boolean;
+  /** Set this group's override: true mutes, false notifies, null follows global. */
+  onMute?: (groupId: string, on: boolean | null) => void;
 }) {
   const [busy, setBusy] = useState(false);
 
@@ -76,6 +83,26 @@ export default function GroupsScreen({
     } finally {
       setBusy(false);
     }
+  };
+
+  /**
+   * One switch per group, whose meaning follows the global setting (spec §6:
+   * global quiet, then "opt into notifications for specific groups instead").
+   *
+   *   global mute off -> the switch means "Mute this group"
+   *   global mute on  -> the switch means "Notify me for this group"
+   *
+   * Turning a switch back to its default clears the override to null rather
+   * than writing the same value the global already implies, so a later change
+   * to the global setting still carries these groups with it.
+   */
+  const effectivelyMuted = (g: GroupInfo) => g.muteOverride ?? globalMute;
+  const switchValue = (g: GroupInfo) =>
+    globalMute ? !effectivelyMuted(g) : effectivelyMuted(g);
+  const onSwitch = (g: GroupInfo, next: boolean) => {
+    if (!onMute) return;
+    if (globalMute) onMute(g.id, next ? false : null);
+    else onMute(g.id, next ? true : null);
   };
 
   const confirmLeave = (g: GroupInfo) => {
@@ -253,6 +280,29 @@ export default function GroupsScreen({
                 )}
               </View>
             ))}
+
+            {onMute && (
+              <View style={[styles.muteRow, { minHeight: base.rowMinHeight * s }]}>
+                <Text
+                  style={{ fontSize: base.fontSizeSmall * s, color: colors.textSecondary, flex: 1 }}
+                  maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+                >
+                  {globalMute ? "Notify me for this group" : "Mute this group"}
+                </Text>
+                <Switch
+                  value={switchValue(g)}
+                  onValueChange={(next) => onSwitch(g, next)}
+                  disabled={busy}
+                  trackColor={{ true: colors.accent, false: colors.border }}
+                  thumbColor={colors.background}
+                  accessibilityLabel={
+                    globalMute
+                      ? `Notify me for ${groupTitle(g.id)}`
+                      : `Mute ${groupTitle(g.id)}`
+                  }
+                />
+              </View>
+            )}
           </View>
         ))}
 
@@ -370,4 +420,16 @@ const styles = StyleSheet.create({
     paddingVertical: base.spacing,
   },
   newGroupLabel: { color: colors.accent, fontWeight: "700" },
+  // Sits under the member rows, divided off so it reads as a setting for the
+  // group rather than another person in it.
+  muteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: base.spacing,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    marginTop: 4,
+  },
 });

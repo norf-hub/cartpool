@@ -1,7 +1,7 @@
 // The "You" tab (mockup): who you are, your plan, and the app-level
-// settings. v1 of the tab carries the pieces the backend supports today —
-// profile, plan status, the large-text toggle, sign out. The mockup's
-// notification mute and full history view land with their server support.
+// settings — profile, plan status, the large-text toggle, the global
+// notification mute (spec §6), sign out. The mockup's full history view still
+// waits on its server support.
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import type { Profile, Subscription } from "@/hooks/useCartpool";
 import { base, colors, fonts } from "@/theme";
@@ -14,6 +14,7 @@ export default function YouScreen({
   scale: s,
   largeText,
   onToggleLargeText,
+  onToggleGlobalMute,
   onSignOut,
 }: {
   profile: Profile | null;
@@ -22,6 +23,8 @@ export default function YouScreen({
   scale: number;
   largeText: boolean;
   onToggleLargeText: (on: boolean) => void;
+  /** Global notification mute (spec §6). Per-group overrides live on Groups. */
+  onToggleGlobalMute: (on: boolean) => void;
   onSignOut: () => void;
 }) {
   const name = profile?.display_name ?? "You";
@@ -105,6 +108,34 @@ export default function YouScreen({
             trackColor={{ true: colors.accent, false: colors.border }}
             thumbColor={colors.background}
             accessibilityLabel="Large text mode"
+          />
+        </View>
+
+        {/* Global mute (spec §6). Phrased as the mute rather than as
+            "notifications on", so the switch being on always means "quieter"
+            — same direction as the per-group toggle on the Groups tab. */}
+        <View style={[styles.settingRow, { minHeight: base.rowMinHeight * s }]}>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{ fontSize: base.fontSize * s, color: colors.text }}
+              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+            >
+              Mute notifications
+            </Text>
+            <Text
+              style={{ fontSize: base.fontSizeSmall * s, color: colors.textSecondary }}
+              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+            >
+              No pings when someone buys something. You can still un-mute a
+              single group on the Groups tab.
+            </Text>
+          </View>
+          <Switch
+            value={profile?.global_mute ?? false}
+            onValueChange={onToggleGlobalMute}
+            trackColor={{ true: colors.accent, false: colors.border }}
+            thumbColor={colors.background}
+            accessibilityLabel="Mute all notifications"
           />
         </View>
       </View>

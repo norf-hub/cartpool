@@ -105,6 +105,13 @@ export const redeemInvite = (code: string) =>
   });
 export const chooseKeptGroups = (groupIds: string[]) =>
   call("choose_kept_groups", { p_groups: groupIds });
+/** Global notification mute (spec §6, 0018). */
+export const setGlobalMute = (on: boolean) => call("set_global_mute", { p_on: on });
+/** Per-group mute override; null via clearGroupMute follows the global setting. */
+export const setGroupMute = (groupId: string, on: boolean) =>
+  call("set_group_mute", { p_group: groupId, p_on: on });
+export const clearGroupMute = (groupId: string) =>
+  call("clear_group_mute", { p_group: groupId });
 export const registerPushToken = (token: string, platform: "ios" | "android") =>
   call("register_push_token", { p_token: token, p_platform: platform });
 export const unregisterPushToken = (token: string) =>
