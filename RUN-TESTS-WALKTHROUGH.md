@@ -71,8 +71,15 @@ that's fine, nothing to commit. **Part 1 done.**
 
 ## Part 2 — `npm test` (needs Postgres, via Docker)
 
-The tests run against a real Postgres database. The simplest way to get one on
-Windows is Docker Desktop.
+The tests run against a real Postgres database, and on Windows that means
+Docker Desktop either way. There are two routes:
+
+- **2b — the project's own Supabase stack.** Recommended. `npm test` then works
+  with no extra typing, because the default database address in
+  `tests/helpers/db.ts` already points at it. Same stack the app uses for local
+  development (`docs/LOCAL-DEV.md`).
+- **2d — a standalone Postgres container.** A fallback if you don't want the
+  whole stack running. Slightly more to type, and easy to get wrong.
 
 ### 2a. Install Docker Desktop (one time)
 
@@ -86,21 +93,67 @@ Windows is Docker Desktop.
 
 Leave Docker Desktop running for the rest of Part 2.
 
-### 2b. Start a Postgres database
+### 2b. Start the local Supabase stack
 
-In PowerShell:
+This needs the Supabase CLI. Check:
 
 ```powershell
-docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:15
+supabase --version
 ```
 
-The first time, Docker downloads Postgres (a short wait). When it prints a
-long string of letters/numbers and returns you to the prompt, the database is
-running in the background.
+If that prints a version (2.x), you're set. If it's not recognised, install it
+with [scoop](https://scoop.sh):
+
+```powershell
+scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+scoop install supabase
+```
+
+Other install options are at
+<https://supabase.com/docs/guides/local-development/cli/getting-started>.
+
+Then, with Docker Desktop running:
+
+```powershell
+cd C:\dev\cartpool
+supabase start
+```
+
+First run downloads a dozen container images — several minutes, once. It
+finishes by printing a table of URLs and keys; the `DB URL` line should read
+`postgresql://postgres:postgres@127.0.0.1:54322/postgres`. A couple of
+`WARN: no SMS provider is enabled` lines are expected and harmless.
 
 ### 2c. Run the tests
 
-Still in PowerShell, at `C:\dev\cartpool`:
+Still at `C:\dev\cartpool`:
+
+```powershell
+npm test
+```
+
+That's all — no database address to set, because the default in
+`tests/helpers/db.ts` already points at port 54322.
+
+The tests use their own `cartpool_test` database on that stack, created
+automatically, so they never touch the app data sitting in the same Postgres.
+You'll see a list of test files. At the end you want **"Test Files"** and
+**"Tests"** both reporting all passed, with no failures.
+
+To shut the stack down when you're done: `supabase stop`. That keeps the local
+database in a Docker volume; add `--no-backup` only if you want it discarded.
+
+### 2d. Alternative — a standalone Postgres container
+
+Skip this if 2b worked. If you'd rather not run the whole stack:
+
+```powershell
+docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:17
+```
+
+The first time, Docker downloads Postgres (a short wait). When it prints a long
+string of letters/numbers and returns you to the prompt, the database is running
+in the background. Then point the tests at it:
 
 ```powershell
 cd C:\dev\cartpool
@@ -111,15 +164,17 @@ npm test
 > ⚠️ That middle line is the Windows PowerShell way to set the database
 > address. The project's README shows a Mac/Linux version
 > (`DATABASE_URL=... npm test`) that will **not** work in PowerShell — use the
-> two-line version above.
+> two-line version above. It also only lasts for that one PowerShell window: open
+> a new one and you have to set it again, or you'll get `ECONNREFUSED`.
 
-You'll see a long list of test names. At the end you want something like
-**"Test Files X passed"** with no failures. The new `cross-group.test.ts`
-should be among them.
+On this route the tests build their schema directly in the container's
+`postgres` database, dropping and rebuilding it each run. That's fine in a
+throwaway container — never aim `DATABASE_URL` at a database whose contents you
+care about.
 
-### 2d. When you're done — clean up (optional)
+### 2e. When you're done — clean up (optional)
 
-To stop the database container later:
+For 2b: `supabase stop`. For 2d:
 
 ```powershell
 docker ps            # shows running containers; copy the CONTAINER ID
@@ -137,9 +192,11 @@ Docker Desktop can also be quit entirely when you're not testing.
 - **"docker is not recognized"** → Docker Desktop isn't installed, or isn't
   finished starting. Make sure the whale icon shows "Engine running", then
   reopen PowerShell.
-- **Tests fail to connect / "ECONNREFUSED"** → usually the Postgres container
-  isn't running: redo step 2b, then 2c. But check the next entry before
-  assuming that — a *running, healthy* database can still be unreachable.
+- **Tests fail to connect / "ECONNREFUSED"** → usually the database isn't
+  running: redo step 2b, then 2c. On the 2d route, check that
+  `$env:DATABASE_URL` is set in *this* PowerShell window. But read the next
+  entry before assuming either — a *running, healthy* database can still be
+  unreachable.
 - **"ECONNREFUSED" while the container is up and healthy** → Windows may have
   reserved the port, in which case Docker fails to publish it **silently**.
   Find your database container and check whether its port really is published:
@@ -149,10 +206,10 @@ Docker Desktop can also be quit entirely when you're not testing.
   docker port <paste-the-container-id-here>
   ```
 
-  You want a line mapping the port to the host: `5432/tcp -> 0.0.0.0:5432` for
-  the container from step 2b, or `-> 0.0.0.0:54322` if you used the
-  `supabase start` route from the README instead. **If it prints nothing**, the
-  port was never published. Confirm why:
+  You want a line mapping the port to the host: `5432/tcp -> 0.0.0.0:54322` for
+  the stack from step 2b (its container is named `supabase_db_cartpool`), or
+  `-> 0.0.0.0:5432` for the standalone container from 2d. **If it prints
+  nothing**, the port was never published. Confirm why:
 
   ```powershell
   netsh interface ipv4 show excludedportrange protocol=tcp

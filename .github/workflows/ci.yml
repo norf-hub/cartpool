@@ -8,7 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:15
+        # Match the local stack and the linked project (supabase/postgres 17.x),
+        # so a 17-only behaviour can't pass locally and fail here, or vice versa.
+        image: postgres:17
         env:
           POSTGRES_PASSWORD: postgres
         ports: ["5432:5432"]
