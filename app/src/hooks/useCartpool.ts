@@ -380,6 +380,13 @@ export function useCartpool(userId: string | null) {
       setProfile((p) => (p ? { ...p, display_name: trimmed, onboarded: true } : p));
       return act(() => rpc.setDisplayName(trimmed));
     },
+    /**
+     * Start a new group (spec §9). Free accounts cap at 3 including the solo
+     * group, so this legitimately returns { ok: false, error: "group_limit" } —
+     * the screen turns that into the paywall rather than an error, since
+     * hitting the cap is the moment the purchase makes sense.
+     */
+    createGroup: () => act(() => rpc.createGroup()),
     /** Name or rename a group (0016). Empty clears back to member names.
      * Optimistic so the new title appears immediately. */
     renameGroup: (groupId: string, name: string) => {

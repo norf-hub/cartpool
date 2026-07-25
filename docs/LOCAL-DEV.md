@@ -156,7 +156,12 @@ Roughly in order, since each step sets up the next:
 7. **Retroactive assign** — mark a bulk item purchased, then long-press it →
    "Add someone to this bulk item".
 8. **Members** — tap any section header → the member roster, with Leave.
-9. **Deep link** — see below.
+9. **Start a group** — Groups tab → **Start a new group**. A new empty group
+   appears, nameable and shareable like any other. Keep tapping: on a free
+   account the 4th attempt opens the paywall instead of creating anything
+   (spec §9 — 3 groups including your own list). During the 3-month trial
+   you're entitled, so the cap won't fire until the trial ends.
+10. **Deep link** — see below.
 
 ### Testing the deep link
 
@@ -182,13 +187,14 @@ tap, per spec §3.
   so that warning in the Expo console is expected, not a failure.
 - **Subscribing** — the paywall is a stub until RevenueCat is configured
   (INFRA.md step 5).
-- **The pick-3 downgrade screen** — needs a frozen account. The realistic
-  route (v3.1): end the trial early, then run the expiry job — in Studio's
-  SQL editor: `update subscriptions set trial_ends_at = now() - interval
-  '1 day' where user_id = '<your-uuid>'; select expire_trials();` — but you
-  need more than 3 groups for the freeze to trigger, so this is easier to
-  leave until you have test data. (`update subscriptions set frozen_read_only
-  = true ...` still works as a blunt shortcut.)
+- **The pick-3 downgrade screen** — needs a frozen account with more than 3
+  groups. Getting the groups is now just tapping **Start a new group** on the
+  Groups tab four times (during the trial you're entitled, so the cap doesn't
+  stop you). Then end the trial and run the expiry job — in Studio's SQL
+  editor: `update subscriptions set trial_ends_at = now() - interval '1 day'
+  where user_id = '<your-uuid>'; select expire_trials();`
+  (`update subscriptions set frozen_read_only = true ...` still works as a
+  blunt shortcut.)
 
 ---
 

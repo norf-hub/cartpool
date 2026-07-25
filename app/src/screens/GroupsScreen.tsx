@@ -32,6 +32,8 @@ export default function GroupsScreen({
   onClose,
   onShare,
   onRename,
+  onCreate,
+  onUpgrade,
 }: {
   groups: GroupInfo[];
   userId: string;
@@ -46,11 +48,35 @@ export default function GroupsScreen({
   onShare?: () => void;
   /** Opens the rename sheet for a group (0016). */
   onRename?: (group: GroupInfo) => void;
+  /** Start a new group. Returns the RPC result so the cap can be handled. */
+  onCreate?: () => Promise<RpcResult<{ group_id?: string }>>;
+  /** Offer the purchase, called when creating hits the free-tier cap. */
+  onUpgrade?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
 
   const groupColor = (groupId: string) =>
     groupPalette[groups.findIndex((g) => g.id === groupId) % groupPalette.length];
+
+  // The free cap (3 groups, solo included) is not an error state: it's the one
+  // moment the purchase is obviously worth something, so it opens the paywall
+  // instead of an alert. Any other failure still reports plainly.
+  const startGroup = async () => {
+    if (!onCreate) return;
+    setBusy(true);
+    try {
+      const res = await onCreate();
+      if (!res.ok) {
+        if (res.error === "group_limit" && onUpgrade) {
+          onUpgrade();
+          return;
+        }
+        Alert.alert("Couldn't start a group", friendly(res.error));
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const confirmLeave = (g: GroupInfo) => {
     const lastMember = g.memberIds.length === 1;
@@ -230,6 +256,23 @@ export default function GroupsScreen({
           </View>
         ))}
 
+        {onCreate && (
+          <Pressable
+            onPress={startGroup}
+            disabled={busy}
+            style={[styles.newGroup, { minHeight: base.tapTarget * s }]}
+            accessibilityRole="button"
+            accessibilityLabel="Start a new group"
+          >
+            <Text
+              style={[styles.newGroupLabel, { fontSize: base.fontSize * s }]}
+              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+            >
+              + Start a new group
+            </Text>
+          </Pressable>
+        )}
+
         <Text
           style={[styles.footnote, { fontSize: base.fontSizeSmall * s }]}
           maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
@@ -248,6 +291,10 @@ function friendly(code: string): string {
       return "You're not in that list anymore.";
     case "read_only":
       return "Your account is read-only right now (subscription lapsed).";
+    // Only reached if onUpgrade wasn't supplied; normally the cap opens the
+    // paywall instead of an alert.
+    case "group_limit":
+      return "Free accounts can be in 3 groups, including your own list.";
     default:
       return `Something went wrong (${code}).`;
   }
@@ -309,4 +356,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: base.spacing,
     paddingTop: base.spacing,
   },
+  // Dashed rather than filled: it reads as an empty slot to fill, and keeps
+  // the solid cards above it as the things that actually exist.
+  newGroup: {
+    marginHorizontal: base.spacing,
+    marginTop: base.spacing,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.accent,
+    borderRadius: base.radius,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: base.spacing,
+  },
+  newGroupLabel: { color: colors.accent, fontWeight: "700" },
 });

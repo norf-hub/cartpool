@@ -215,6 +215,11 @@ export default function MainTabs({ userId }: { userId: string }) {
             onBlock={cp.blockUser}
             onShare={() => setSharing(true)}
             onRename={(g) => setRenaming(g)}
+            onCreate={cp.createGroup}
+            // Hitting the free cap is the paywall's natural entry point — the
+            // only other way in is the downgrade screen, which a paying-curious
+            // user on the free tier never sees.
+            onUpgrade={() => setPaywall(true)}
           />
         )}
         {tab === "grabs" && (
@@ -262,6 +267,23 @@ export default function MainTabs({ userId }: { userId: string }) {
         scale={s}
         onRename={cp.renameGroup}
         onClose={() => setRenaming(null)}
+      />
+
+      {/* Also mounted here, not just on the downgrade screen: the free-tier cap
+          (Groups tab -> Start a new group) is how a never-subscribed user
+          reaches the paywall, and they are by definition not frozen. */}
+      <PaywallSheet
+        visible={paywall}
+        onClose={() => setPaywall(false)}
+        scale={s}
+        onBuy={() => {
+          // RevenueCat purchase lands with store config (INFRA §5).
+          setPaywall(false);
+          Alert.alert(
+            "Not available yet",
+            "Purchasing isn't wired up in this build yet, so unlimited groups can't be unlocked here."
+          );
+        }}
       />
     </View>
   );
