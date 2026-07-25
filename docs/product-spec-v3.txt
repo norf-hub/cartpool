@@ -536,3 +536,45 @@ Non-goals
     a future phase-2 idea is for.
 -   No merging of duplicate wants across adders (§4 rule stands: same
     item wanted by two people = two rows).
+
+--------------------------------------------------------------------------
+
+Amendment v3.4 — July 24, 2026: Named groups, and group-first framing
+
+Two related changes: groups become nameable, and the product's language
+stops treating the solo list as the default case. Implemented in
+migration 0016.
+
+Named groups
+
+-   groups.name is nullable text (<= 40 chars). Null means "unnamed",
+    and the client falls back to the derived member-name title as
+    before ("With Rosa, Bill"), so existing groups are unaffected.
+-   Any ACTIVE MEMBER may rename a shared group. There is no owner or
+    admin role anywhere in the spec — membership is the only authority,
+    consistent with the fact that no one can remove anyone else. A
+    rename is visible to the whole group immediately.
+-   Renaming obeys the same write rules as everything else (§9): a
+    frozen or read-only account cannot rename, and a non-member gets
+    the typed `not_a_member` error.
+-   Submitting an empty name CLEARS it, restoring the automatic
+    member-name title. That is the only way back, so it is treated as a
+    valid save rather than a validation failure.
+
+Group-first framing
+
+-   Cartpool still works for one person, and the solo group every user
+    gets at signup is unchanged mechanically. What changes is emphasis:
+    the app is presented as a SHARED list that also works alone, not a
+    personal list that can be shared.
+-   Onboarding leads with the shared benefits (shop for each other, one
+    list with no double-buying, split bulk buys); "works solo too" is
+    the closing note, not the opening one.
+-   The first-run screen's primary action is "Invite your people";
+    adding a first item on your own is the secondary path. Neither is
+    blocked — the solo route stays one tap away.
+-   User-facing language says "group", not "list", for the thing you
+    belong to (the free limit is 3 GROUPS; the You tab counts groups).
+    "List" is retained only for the items themselves.
+-   A group with no other members reads as "Just you" rather than "My
+    list": a group awaiting people, not a private space.

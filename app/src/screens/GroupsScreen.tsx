@@ -31,6 +31,7 @@ export default function GroupsScreen({
   onBlock,
   onClose,
   onShare,
+  onRename,
 }: {
   groups: GroupInfo[];
   userId: string;
@@ -43,6 +44,8 @@ export default function GroupsScreen({
   onClose?: () => void;
   /** Tab mode: open the share/join overlay. */
   onShare?: () => void;
+  /** Opens the rename sheet for a group (0016). */
+  onRename?: (group: GroupInfo) => void;
 }) {
   const [busy, setBusy] = useState(false);
 
@@ -78,7 +81,7 @@ export default function GroupsScreen({
   const confirmBlock = (targetId: string) => {
     Alert.alert(
       `Block ${nameOf(targetId)}?`,
-      "You'll leave every list you share with them (your unbought items on those lists disappear). Neither of you will be able to join a list the other is in. They won't be notified, and this can't be undone in the app.",
+      "You'll leave every group you share with them (your unbought items on those lists disappear). Neither of you will be able to join a group the other is in. They won't be notified, and this can't be undone in the app.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -107,7 +110,7 @@ export default function GroupsScreen({
           style={[styles.headerTitle, { fontSize: base.fontSizeTitle * s }]}
           maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
         >
-          Your lists
+          Your groups
         </Text>
         {onShare && (
           <Pressable
@@ -158,6 +161,26 @@ export default function GroupsScreen({
               >
                 {groupTitle(g.id)}
               </Text>
+              {onRename && (
+                <Pressable
+                  onPress={() => onRename(g)}
+                  disabled={busy}
+                  style={[styles.leaveButton, { minHeight: base.tapTarget * s }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Rename ${groupTitle(g.id)}`}
+                >
+                  <Text
+                    style={{
+                      color: colors.accent,
+                      fontSize: base.fontSizeSmall * s,
+                      fontWeight: "600",
+                    }}
+                    maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+                  >
+                    {g.name ? "Rename" : "Name it"}
+                  </Text>
+                </Pressable>
+              )}
               <Pressable
                 onPress={() => confirmLeave(g)}
                 disabled={busy}
@@ -211,8 +234,8 @@ export default function GroupsScreen({
           style={[styles.footnote, { fontSize: base.fontSizeSmall * s }]}
           maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
         >
-          Lists hold up to 4 people. No one can remove anyone else — leaving is
-          always your own choice.
+          Groups hold up to 4 people. No one can remove anyone else — leaving
+          is always your own choice.
         </Text>
       </ScrollView>
     </View>

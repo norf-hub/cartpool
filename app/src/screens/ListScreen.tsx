@@ -73,8 +73,8 @@ export default function ListScreen({
   // Cross-group model: one unified list (mockup layout).
   //   • The most recent pickup — my item someone else bought for me — becomes
   //     the "Waiting for you" hero at the top (see ListHero).
-  //   • Still open — every open item I can see.
-  //   • Recently bought — the rest of the purchase history.
+  //   • Items on your list — every open item I can see.
+  //   • Recently purchased — the rest of the purchase history.
   // Any extra pickups beyond the featured one (rare) get their own section so
   // nothing is hidden.
   const byNewest = (a: Item, b: Item) =>
@@ -103,9 +103,14 @@ export default function ListScreen({
     const extraPickups = pickups.slice(1);
     if (extraPickups.length > 0)
       out.push({ key: "pickup", color: colors.accent, title: "Also waiting for you", data: extraPickups });
-    out.push({ key: "open", color: colors.accent, title: "Still open", data: open });
+    out.push({ key: "open", color: colors.accent, title: "Items on your list", data: open });
     if (history.length > 0)
-      out.push({ key: "done", color: colors.purchased, title: "Recently bought", data: history });
+      out.push({
+        key: "done",
+        color: colors.purchased,
+        title: "Recently purchased",
+        data: history,
+      });
     return out;
   }, [cp.items, userId, pickups]);
 
@@ -254,7 +259,7 @@ export default function ListScreen({
   const trialText =
     trialDays > 0
       ? `Free trial · ${trialDays} ${trialDays === 1 ? "day" : "days"} left`
-      : "Free plan · up to 3 lists";
+      : "Free plan · up to 3 groups";
 
   return (
     <KeyboardAvoidingView
@@ -269,8 +274,8 @@ export default function ListScreen({
       {cp.waitlist.length > 0 && (
         <Text style={styles.waitlistBanner} maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
           {cp.waitlist.length === 1
-            ? "You're on the waitlist for a full list. You'll be added as soon as a spot opens."
-            : `You're on the waitlist for ${cp.waitlist.length} full lists. You'll be added as spots open.`}
+            ? "You're on the waitlist for a full group. You'll be added as soon as a spot opens."
+            : `You're on the waitlist for ${cp.waitlist.length} full groups. You'll be added as spots open.`}
         </Text>
       )}
 
@@ -457,7 +462,8 @@ export default function ListScreen({
           cp.loading ? null : (
             <View>
               <Text style={styles.empty} maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
-                Nothing on the list yet. Add your first item above.
+                Nothing on the list yet. Add an item above — and invite the
+                people you shop with so you're not tracking it alone.
               </Text>
               <Pressable
                 onPress={onOpenShare}
@@ -473,7 +479,7 @@ export default function ListScreen({
                   }}
                   maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
                 >
-                  Share it with someone, or join a list
+                  Invite people, or join a group
                 </Text>
               </Pressable>
             </View>
@@ -508,7 +514,7 @@ export default function ListScreen({
           setPaywall(false);
           Alert.alert(
             "Not available yet",
-            "Purchasing isn't wired up in this build. Your free trial keeps unlimited lists working in the meantime."
+            "Purchasing isn't wired up in this build. Your free trial keeps unlimited groups working in the meantime."
           );
         }}
       />

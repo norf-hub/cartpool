@@ -302,7 +302,7 @@ function friendlyRedeemError(code: string): string {
       return "You're already in that list.";
     case "group_limit":
       // The free tier allows 3 groups; joining a 4th needs a subscription.
-      return "You're in 3 lists already, which is the free limit. Leave one, or subscribe for unlimited lists.";
+      return "You're in 3 groups already, which is the free limit. Leave one, or unlock unlimited groups.";
     case "not_available":
       // Deliberately vague: the co-placement bar is silent on both sides
       // (spec §3), so this must not reveal that a block exists.

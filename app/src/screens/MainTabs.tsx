@@ -19,6 +19,8 @@ import YouScreen from "@/screens/YouScreen";
 import NameScreen from "@/screens/NameScreen";
 import FirstRunScreen from "@/screens/FirstRunScreen";
 import PaywallSheet from "@/screens/PaywallSheet";
+import RenameGroupSheet from "@/screens/RenameGroupSheet";
+import type { GroupInfo } from "@/hooks/useCartpool";
 import { colors } from "@/theme";
 import { LARGE_TEXT_SCALE } from "@/theme/accessibility";
 
@@ -35,6 +37,8 @@ export default function MainTabs({ userId }: { userId: string }) {
   const [pendingCode, setPendingCode] = useState<string | null>(null);
   // Paywall opened from the downgrade screen's "Unlock instead" button.
   const [paywall, setPaywall] = useState(false);
+  // Group being named/renamed (0016), or null when the sheet is closed.
+  const [renaming, setRenaming] = useState<GroupInfo | null>(null);
   // Onboarding (name → first-run) for a brand-new account. Latched from the
   // profile's onboarded flag once, then driven locally so the mid-flow
   // set_display_name (which flips onboarded true) doesn't yank the screen.
@@ -74,11 +78,15 @@ export default function MainTabs({ userId }: { userId: string }) {
     return () => sub.remove();
   }, []);
 
+  // A custom name (0016) always wins; otherwise fall back to who's in it.
+  // A group with no one else yet is "Just you" rather than "My list" — it
+  // reads as a group waiting for people, which is the point of the app.
   const groupTitle = (groupId: string) => {
     const g = cp.groups.find((x) => x.id === groupId);
-    if (!g) return "List";
+    if (!g) return "Group";
+    if (g.name) return g.name;
     const others = g.memberIds.filter((id) => id !== userId).map((id) => cp.nameOf(id));
-    return others.length === 0 ? "My list" : `With ${others.join(", ")}`;
+    return others.length === 0 ? "Just you" : `With ${others.join(", ")}`;
   };
 
   const openOffers = useMemo(
@@ -143,7 +151,7 @@ export default function MainTabs({ userId }: { userId: string }) {
             setPaywall(false);
             Alert.alert(
               "Not available yet",
-              "Purchasing isn't wired up in this build. Pick 3 lists for now — the others come back when you unlock unlimited lists later."
+              "Purchasing isn't wired up in this build. Pick 3 groups for now — the others come back when you unlock unlimited groups later."
             );
           }}
         />
@@ -195,6 +203,7 @@ export default function MainTabs({ userId }: { userId: string }) {
             onLeave={cp.leaveGroup}
             onBlock={cp.blockUser}
             onShare={() => setSharing(true)}
+            onRename={(g) => setRenaming(g)}
           />
         )}
         {tab === "grabs" && (
@@ -226,6 +235,23 @@ export default function MainTabs({ userId }: { userId: string }) {
         )}
       </View>
       <TabBar tab={tab} onChange={setTab} scale={s} badges={{ grabs: openOffers }} />
+
+      <RenameGroupSheet
+        group={renaming}
+        fallbackTitle={
+          renaming
+            ? (() => {
+                const others = renaming.memberIds
+                  .filter((id) => id !== userId)
+                  .map((id) => cp.nameOf(id));
+                return others.length === 0 ? "Just you" : `With ${others.join(", ")}`;
+              })()
+            : ""
+        }
+        scale={s}
+        onRename={cp.renameGroup}
+        onClose={() => setRenaming(null)}
+      />
     </View>
   );
 }

@@ -52,6 +52,8 @@ export type GroupInfo = {
   id: string;
   /** Active member user ids, including me. */
   memberIds: string[];
+  /** Custom name (0016), or null to use the member-name fallback. */
+  name: string | null;
 };
 
 export type Profile = {
@@ -160,12 +162,14 @@ export function useCartpool(userId: string | null) {
         return;
       }
 
-      const [membersRes, itemsRes, profilesRes, myProfile] = await Promise.all([
+      const [membersRes, groupsRes, itemsRes, profilesRes, myProfile] = await Promise.all([
         pub()
           .from("memberships")
           .select("group_id, user_id")
           .in("group_id", groupIds)
           .is("left_at", null),
+        // Custom group names (0016); null means fall back to member names.
+        pub().from("groups").select("id, name").in("id", groupIds),
         // 0013: no group filter — RLS scopes items to "shares a group with the
         // adder" (plus the purchased-grace read), which IS the cross-group
         // merged list. Filtering by my group ids here would hide items whose
@@ -181,6 +185,7 @@ export function useCartpool(userId: string | null) {
         rpc.myProfile(),
       ]);
       if (membersRes.error) throw membersRes.error;
+      if (groupsRes.error) throw groupsRes.error;
       if (itemsRes.error) throw itemsRes.error;
       if (profilesRes.error) throw profilesRes.error;
 
@@ -190,6 +195,8 @@ export function useCartpool(userId: string | null) {
           memberIds: (membersRes.data ?? [])
             .filter((m) => m.group_id === id)
             .map((m) => m.user_id as string),
+          name:
+            ((groupsRes.data ?? []).find((g) => g.id === id)?.name as string | null) ?? null,
         }))
       );
       const loadedItems = (itemsRes.data ?? []) as Item[];
@@ -372,6 +379,15 @@ export function useCartpool(userId: string | null) {
       const trimmed = name.trim();
       setProfile((p) => (p ? { ...p, display_name: trimmed, onboarded: true } : p));
       return act(() => rpc.setDisplayName(trimmed));
+    },
+    /** Name or rename a group (0016). Empty clears back to member names.
+     * Optimistic so the new title appears immediately. */
+    renameGroup: (groupId: string, name: string) => {
+      const trimmed = name.trim();
+      setGroups((gs) =>
+        gs.map((g) => (g.id === groupId ? { ...g, name: trimmed || null } : g))
+      );
+      return act(() => rpc.renameGroup(groupId, trimmed));
     },
     /** The required downgrade pick: exactly 3 group ids (spec §9). */
     chooseKeptGroups: (groupIds: string[]) => act(() => rpc.chooseKeptGroups(groupIds)),

@@ -6,22 +6,30 @@ import SheetButton from "@/components/SheetButton";
 import { base, colors, fonts } from "@/theme";
 import { MAX_OS_FONT_SCALE } from "@/theme/accessibility";
 
+// Group value leads: the app works solo, but it's *for* shopping together,
+// so the shared benefits come first and the solo case is the closing note.
 const FEATURES: { title: string; body: string; tint: string; ink: string }[] = [
   {
-    title: "Keep a simple list",
-    body: "Works as a plain personal shopping list from the first tap.",
-    tint: "#fff2eb", // accent-100
-    ink: "#8c491a", // accent-700
-  },
-  {
     title: "Shop for each other",
-    body: "Loop in up to 3 people; anyone can pick up anyone's items.",
+    body: "Whoever gets to the shop first picks up everyone's items.",
     tint: "#f0fae1", // accent-2-100
     ink: "#56633f", // accent-2-700
   },
   {
+    title: "One list, no double-buying",
+    body: "Add something and your whole group sees it the moment you do.",
+    tint: "#f0fae1",
+    ink: "#56633f",
+  },
+  {
     title: "Split the bulk buys",
     body: "One tap to go in on a Costco pack — no quantity math.",
+    tint: "#fff2eb", // accent-100
+    ink: "#8c491a", // accent-700
+  },
+  {
+    title: "Works solo too",
+    body: "Start on your own and invite your people whenever you're ready.",
     tint: "#fff2eb",
     ink: "#8c491a",
   },
@@ -44,8 +52,8 @@ export default function WelcomeScreen({
           Cartpool
         </Text>
         <Text style={[styles.pitch, { fontSize: 16.5 * s }]} maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
-          A shopping list that's yours alone — or shared with the people who
-          shop for you.
+          The shared shopping list for the people who shop for each other —
+          your household, your family, your flat.
         </Text>
 
         <View style={styles.features}>

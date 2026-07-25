@@ -112,6 +112,38 @@ describe("api wrappers bind identity to auth.uid()", () => {
     ).rejects.toThrow(/permission denied/);
   });
 
+  it("rename_group (0016): members rename; outsiders rejected; internal surface locked", async () => {
+    const [a, b] = [await mkUser("a"), await mkUser("b")];
+    const g = await mkGroupWith([a]);
+
+    const r = await asUser(a, async (c) => {
+      const { rows } = await c.query(`select api.rename_group($1, 'Household') as r`, [g]);
+      return rows[0].r;
+    });
+    expect(r.ok).toBe(true);
+    expect((await q(`select name from groups where id = $1`, [g])).rows[0].name).toBe(
+      "Household"
+    );
+
+    // A non-member can't rename someone else's group.
+    const outsider = await asUser(b, async (c) => {
+      const { rows } = await c.query(`select api.rename_group($1, 'Mine now') as r`, [g]);
+      return rows[0].r;
+    });
+    expect(outsider).toMatchObject({ ok: false, error: "not_a_member" });
+    expect((await q(`select name from groups where id = $1`, [g])).rows[0].name).toBe(
+      "Household"
+    );
+
+    // Empty clears the name, restoring the client's member-name fallback.
+    await asUser(a, (c) => c.query(`select api.rename_group($1, '   ')`, [g]));
+    expect((await q(`select name from groups where id = $1`, [g])).rows[0].name).toBeNull();
+
+    await expect(
+      asUser(b, (c) => c.query(`select public.rename_group($1, $2, 'x')`, [a, g]))
+    ).rejects.toThrow(/permission denied/);
+  });
+
   it("clients cannot write tables directly", async () => {
     const a = await mkUser("a");
     const g = await mkGroupWith([a]);

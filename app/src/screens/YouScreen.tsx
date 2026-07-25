@@ -57,7 +57,7 @@ export default function YouScreen({
             style={{ fontSize: base.fontSizeSmall * s, color: colors.textSecondary }}
             maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
           >
-            {groupCount === 1 ? "1 list" : `${groupCount} lists`}
+            {groupCount === 1 ? "1 group" : `${groupCount} groups`}
           </Text>
         </View>
       </View>
@@ -132,15 +132,15 @@ export default function YouScreen({
 }
 
 function planLine(sub: Subscription | null): string {
-  if (!sub) return "Free — up to 3 lists.";
-  if (sub.entitlement_active) return "Unlimited lists — unlocked. Thank you!";
+  if (!sub) return "Free — up to 3 groups.";
+  if (sub.entitlement_active) return "Unlimited groups — unlocked. Thank you!";
   const msLeft = new Date(sub.trial_ends_at).getTime() - Date.now();
   if (msLeft > 0) {
     const days = Math.ceil(msLeft / 86_400_000);
-    return `Unlimited lists free for ${days === 1 ? "1 more day" : `${days} more days`}, then up to 3 (or a one-time unlock).`;
+    return `Unlimited groups free for ${days === 1 ? "1 more day" : `${days} more days`}, then up to 3 (or a one-time unlock).`;
   }
-  if (sub.frozen_read_only) return "Read-only: your free period ended with more than 3 lists. Pick 3 to keep, or unlock unlimited.";
-  return "Free — up to 3 lists. A one-time purchase unlocks unlimited.";
+  if (sub.frozen_read_only) return "Read-only: your free period ended with more than 3 groups. Pick 3 to keep, or unlock unlimited.";
+  return "Free — up to 3 groups. A one-time purchase unlocks unlimited.";
 }
 
 const styles = StyleSheet.create({

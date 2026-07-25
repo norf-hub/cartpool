@@ -37,7 +37,7 @@ export default function ListHero({
   scale: number;
   onPress: () => void;
 }) {
-  const listWord = groupCount === 1 ? "list" : "lists";
+  const listWord = groupCount === 1 ? "group" : "groups";
 
   // Decorative circles — identical in both states, just positioned to bleed
   // off the corners. Pointer-events off so taps fall through to the card.

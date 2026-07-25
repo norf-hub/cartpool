@@ -75,15 +75,15 @@ export default function ChooseGroupsScreen({
         style={[styles.title, { fontSize: base.fontSizeTitle * s }]}
         maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
       >
-        Choose 3 lists to keep
+        Choose 3 groups to keep
       </Text>
       <Text
         style={[styles.body, { fontSize: base.fontSize * s }]}
         maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
       >
-        Your 3 free months are up, and the free plan includes 3 lists. Pick the
+        Your 3 free months are up, and the free plan includes 3 groups. Pick the
         3 to keep using. The others aren't deleted — they become read-only, and
-        everything comes back if you unlock unlimited lists.
+        everything comes back if you unlock unlimited groups.
       </Text>
 
       <ScrollView contentContainerStyle={{ paddingBottom: base.spacing * 2 }}>
@@ -154,7 +154,7 @@ export default function ChooseGroupsScreen({
             (picked.size !== KEEP || busy) && { opacity: 0.4 },
           ]}
           accessibilityRole="button"
-          accessibilityLabel={`Keep these ${KEEP} lists`}
+          accessibilityLabel={`Keep these ${KEEP} groups`}
         >
           {busy ? (
             <ActivityIndicator color={colors.accentText} />
@@ -175,13 +175,13 @@ export default function ChooseGroupsScreen({
           onPress={onResubscribe}
           style={[styles.resub, { minHeight: base.tapTarget * s }]}
           accessibilityRole="button"
-          accessibilityLabel="Unlock unlimited lists instead and keep them all"
+          accessibilityLabel="Unlock unlimited groups instead and keep them all"
         >
           <Text
             style={{ color: colors.accent, fontSize: base.fontSizeSmall * s, fontWeight: "600" }}
             maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
           >
-            Or unlock unlimited lists ($10, one time) and keep them all
+            Or unlock unlimited groups ($10, one time) and keep them all
           </Text>
         </Pressable>
       </View>
@@ -192,13 +192,13 @@ export default function ChooseGroupsScreen({
 function friendly(code: string): string {
   switch (code) {
     case "must_pick_exactly_3":
-      return "Pick exactly 3 lists.";
+      return "Pick exactly 3 groups.";
     case "not_frozen":
       // Webhook already cleared it (purchased on another device, say);
       // the refresh will dismiss this screen on its own.
       return "Looks like this is already sorted — one moment.";
     case "not_a_member":
-      return "One of those lists is no longer yours. The list has refreshed — pick again.";
+      return "One of those groups is no longer yours. The list has refreshed — pick again.";
     default:
       return `Something went wrong (${code}).`;
   }

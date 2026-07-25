@@ -52,6 +52,11 @@ export const setLargeText = (on: boolean) => call("set_large_text", { p_on: on }
 export const setDisplayName = (name: string) =>
   call("set_display_name", { p_name: name });
 
+/** Name or rename a group (0016). Empty string clears it back to the
+ * member-name fallback. Any active member may rename. */
+export const renameGroup = (groupId: string, name: string) =>
+  call("rename_group", { p_group: groupId, p_name: name });
+
 /** Own full profile — the only way to read your own phone number/settings. */
 export async function myProfile() {
   const { data, error } = await api().rpc("my_profile");

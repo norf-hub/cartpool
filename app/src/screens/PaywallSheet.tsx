@@ -13,7 +13,7 @@ import { base, colors, fonts } from "@/theme";
 import { MAX_OS_FONT_SCALE } from "@/theme/accessibility";
 
 const PERKS = [
-  "Unlimited shared & solo lists",
+  "Unlimited groups — a list for every crew",
   "One-time payment — never a subscription",
   "Works across your devices & Family Sharing",
 ];
@@ -30,7 +30,7 @@ export default function PaywallSheet({
   scale: number;
 }) {
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Unlock unlimited lists" scale={s}>
+    <BottomSheet visible={visible} onClose={onClose} title="Unlock unlimited groups" scale={s}>
       <View style={styles.header}>
         <View style={[styles.icon, { width: 60 * s, height: 60 * s }]}>
           <Text style={{ color: colors.heroText, fontSize: 28 * s }}>✦</Text>
@@ -39,7 +39,7 @@ export default function PaywallSheet({
           style={[styles.title, { fontSize: 30 * s }]}
           maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
         >
-          Unlimited lists
+          Unlimited groups
         </Text>
         <Text
           style={[styles.price, { fontSize: 15 * s }]}

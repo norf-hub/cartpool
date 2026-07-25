@@ -27,7 +27,7 @@ export default function FirstRunScreen({
         <View style={styles.topRow}>
           <Text style={[styles.tag, { fontSize: base.fontSizeSmall * s }]}
             maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
-            My list
+            Your first group
           </Text>
           <Pressable
             onPress={onSkip}
@@ -46,8 +46,8 @@ export default function FirstRunScreen({
           You're all set, {name}
         </Text>
         <Text style={[styles.sub, { fontSize: 15 * s }]} maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
-          This is your personal list. Add what you need, or invite the people
-          who shop with you — up to 3 per group.
+          Cartpool works best with the people you shop with. Invite up to 3 of
+          them and you'll share one list — or start adding items on your own.
         </Text>
 
         <View style={styles.emptyCard}>
@@ -59,39 +59,41 @@ export default function FirstRunScreen({
             </View>
             <Text style={[styles.emptyTitle, { fontSize: 22 * s }]}
               maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
-              Nothing here yet
+              Better with your people
             </Text>
             <Text style={[styles.emptyBody, { fontSize: 13.5 * s }]}
               maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
-              Your first item is one tap away.
+              Everyone sees the same list, so nothing gets bought twice.
             </Text>
           </View>
         </View>
 
+        {/* Adding an item is the secondary path here — the primary button
+            below invites people, since a group is what makes the app work. */}
         <Pressable
-          onPress={onInvite}
+          onPress={onAddFirst}
           style={[styles.inviteRow, { minHeight: base.rowMinHeight * s }]}
           accessibilityRole="button"
-          accessibilityLabel="Invite people to a list"
+          accessibilityLabel="Add your first item on your own"
         >
-          <View style={[styles.inviteIcon]}>
-            <Text style={{ color: "#56633f", fontSize: 20 * s, fontFamily: fonts.bodyBold }}>+</Text>
+          <View style={[styles.inviteIcon, { backgroundColor: "#fff2eb" }]}>
+            <Text style={{ color: "#8c491a", fontSize: 20 * s, fontFamily: fonts.bodyBold }}>+</Text>
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.inviteTitle, { fontSize: 15 * s }]}
               maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
-              Invite people
+              Start on your own
             </Text>
             <Text style={[styles.inviteSub, { fontSize: 12.5 * s }]}
               maxFontSizeMultiplier={MAX_OS_FONT_SCALE}>
-              Share a code, phone, or email — 7-day invite
+              Add your first item — invite people any time
             </Text>
           </View>
         </Pressable>
       </ScrollView>
 
       <View style={styles.footer}>
-        <SheetButton label="＋ Add your first item" onPress={onAddFirst} variant="primary" scale={s} />
+        <SheetButton label="Invite your people" onPress={onInvite} variant="primary" scale={s} />
       </View>
     </View>
   );

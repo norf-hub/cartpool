@@ -77,8 +77,8 @@ export default function NameScreen({
             style={[styles.readyBody, { fontSize: 14 * s }]}
             maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
           >
-            A personal list is created just for you. Invite up to 3 people per
-            list whenever you like — or keep it solo.
+            Your first group is ready. Invite up to 3 people to shop together
+            — or start on your own and add them later.
           </Text>
         </View>
       </View>
