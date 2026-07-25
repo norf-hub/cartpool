@@ -53,7 +53,10 @@ export default function MainTabs({ userId }: { userId: string }) {
   // Large-text mode (addendum §4.1): persisted on the profile row, set via
   // api.set_large_text (0014). cp.setLargeText flips the local profile
   // optimistically, so the scale changes on the spot.
-  const largeText = cp.profile?.large_text_mode ?? false;
+  // Default true, matching the column default (0017): while the profile is
+  // still loading, start at the accessible scale rather than flashing small
+  // text at someone who needs the large one.
+  const largeText = cp.profile?.large_text_mode ?? true;
   const s = largeText ? LARGE_TEXT_SCALE : 1;
 
   // Invite deep links land here: prefill the join field and open the share

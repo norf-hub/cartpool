@@ -62,8 +62,10 @@ describe("api wrappers bind identity to auth.uid()", () => {
   it("set_large_text (0014): writes only the caller's own row; internal surface locked", async () => {
     const [a, b] = [await mkUser("a"), await mkUser("b")];
 
+    // Sets false, not true: large text is the default since 0017, so writing
+    // true would pass even if the update did nothing at all.
     const r = await asUser(a, async (c) => {
-      const { rows } = await c.query(`select api.set_large_text(true) as r`);
+      const { rows } = await c.query(`select api.set_large_text(false) as r`);
       return rows[0].r;
     });
     expect(r.ok).toBe(true);
@@ -73,8 +75,8 @@ describe("api wrappers bind identity to auth.uid()", () => {
       [[a, b].sort()]
     );
     const flagOf = (u: string) => flags.rows.find((x) => x.id === u)!.large_text_mode;
-    expect(flagOf(a)).toBe(true); // caller's row flipped
-    expect(flagOf(b)).toBe(false); // no one else's
+    expect(flagOf(a)).toBe(false); // caller's row flipped off
+    expect(flagOf(b)).toBe(true); // no one else's: still the default
 
     // The parameterized core can't be used to flip someone else's setting.
     await expect(

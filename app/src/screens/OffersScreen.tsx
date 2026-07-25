@@ -49,6 +49,17 @@ type Props = {
 const money = (cents: number) =>
   cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`;
 
+/**
+ * Parse a typed amount into a number of dollars. Cents are welcome: "2.50".
+ *
+ * The comma swap matters — on a comma-decimal locale the decimal-pad gives
+ * "2,50", and bare parseFloat stops at the comma and returns 2, silently
+ * pricing the thing at $2. Also tolerates a leading "$" and stray spaces,
+ * since people type what they'd write on a label.
+ */
+const parseAmount = (raw: string): number =>
+  parseFloat(raw.trim().replace(/^\$/, "").replace(",", "."));
+
 export default function OffersScreen(p: Props) {
   const s = p.scale;
   const [text, setText] = useState("");
@@ -68,7 +79,7 @@ export default function OffersScreen(p: Props) {
       : writable[0]?.id ?? null;
 
   const atCostCents = useMemo(() => {
-    const paid = parseFloat(packPaid);
+    const paid = parseAmount(packPaid);
     const size = parseInt(packSize, 10);
     if (!isFinite(paid) || !isFinite(size) || size < 1) return null;
     return Math.round((paid * 100) / size);
@@ -79,8 +90,8 @@ export default function OffersScreen(p: Props) {
       ? null
       : pricing === "at_cost"
         ? atCostCents
-        : isFinite(parseFloat(customPrice))
-          ? Math.round(parseFloat(customPrice) * 100)
+        : isFinite(parseAmount(customPrice))
+          ? Math.round(parseAmount(customPrice) * 100)
           : null;
 
   const canPost =
@@ -247,7 +258,7 @@ export default function OffersScreen(p: Props) {
           <View style={styles.formRow}>
             <TextInput
               style={[styles.inputSmall, { fontSize: base.fontSize * s, minHeight: base.tapTarget * s }]}
-              placeholder="Pack cost, e.g. 12"
+              placeholder="Pack cost, e.g. 12.99"
               placeholderTextColor={colors.textSecondary}
               keyboardType="decimal-pad"
               value={packPaid}
@@ -276,7 +287,7 @@ export default function OffersScreen(p: Props) {
           <View style={styles.formRow}>
             <TextInput
               style={[styles.inputSmall, { fontSize: base.fontSize * s, minHeight: base.tapTarget * s }]}
-              placeholder="Price each, e.g. 3"
+              placeholder="Price each, e.g. 2.50"
               placeholderTextColor={colors.textSecondary}
               keyboardType="decimal-pad"
               value={customPrice}

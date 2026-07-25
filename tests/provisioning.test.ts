@@ -31,6 +31,18 @@ describe("signup provisioning (auth.users trigger)", () => {
     expect((await activeGroups(authId)).length).toBe(1); // solo group from day one
   });
 
+  it("a new signup gets large text on by default (0017)", async () => {
+    const { rows } = await q(
+      `insert into auth.users (id, phone) values (gen_random_uuid(), $1) returning id`,
+      [phone()]
+    );
+    // create_user never names the column, so this is the table default doing
+    // the work — the accessible scale is what an untouched account starts at.
+    const u = (await q(`select large_text_mode from users where id = $1`, [rows[0].id]))
+      .rows[0];
+    expect(u.large_text_mode).toBe(true);
+  });
+
   it("missing display_name metadata falls back to a placeholder", async () => {
     const { rows } = await q(
       `insert into auth.users (id, phone) values (gen_random_uuid(), $1) returning id`,
