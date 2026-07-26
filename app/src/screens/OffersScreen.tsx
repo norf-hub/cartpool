@@ -22,7 +22,13 @@ import type { RpcResult } from "@/api/rpc";
 import { base, colors, fonts } from "@/theme";
 import { MAX_OS_FONT_SCALE } from "@/theme/accessibility";
 
-type Pricing = "free" | "at_cost" | "custom";
+/**
+ * Two choices only: give it away, or name the exact amount you want for each
+ * remaining unit. (The earlier "at cost" mode divided a pack price by the pack
+ * size to suggest a per-unit figure; it's gone in favour of typing the number
+ * you actually want, which is one less sum to do in the shop.)
+ */
+type Pricing = "free" | "amount";
 
 type Props = {
   userId: string;
@@ -65,10 +71,7 @@ export default function OffersScreen(p: Props) {
   const [text, setText] = useState("");
   const [qty, setQty] = useState(1);
   const [pricing, setPricing] = useState<Pricing>("free");
-  // At cost: what the whole pack cost + how many units it had -> per-unit.
-  const [packPaid, setPackPaid] = useState("");
-  const [packSize, setPackSize] = useState("");
-  const [customPrice, setCustomPrice] = useState("");
+  const [priceText, setPriceText] = useState("");
   const [targetGroup, setTargetGroup] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -78,21 +81,14 @@ export default function OffersScreen(p: Props) {
       ? targetGroup
       : writable[0]?.id ?? null;
 
-  const atCostCents = useMemo(() => {
-    const paid = parseAmount(packPaid);
-    const size = parseInt(packSize, 10);
-    if (!isFinite(paid) || !isFinite(size) || size < 1) return null;
-    return Math.round((paid * 100) / size);
-  }, [packPaid, packSize]);
-
-  const priceCents: number | null =
-    pricing === "free"
-      ? null
-      : pricing === "at_cost"
-        ? atCostCents
-        : isFinite(parseAmount(customPrice))
-          ? Math.round(parseAmount(customPrice) * 100)
-          : null;
+  // null means free. Anything unparseable stays null, which keeps Post
+  // disabled rather than quietly posting a price nobody meant.
+  const priceCents: number | null = useMemo(() => {
+    if (pricing === "free") return null;
+    const amount = parseAmount(priceText);
+    if (!isFinite(amount) || amount < 0) return null;
+    return Math.round(amount * 100);
+  }, [pricing, priceText]);
 
   const canPost =
     !!activeGroup && text.trim().length > 0 && qty >= 1 && (pricing === "free" || priceCents !== null);
@@ -109,9 +105,7 @@ export default function OffersScreen(p: Props) {
       setText("");
       setQty(1);
       setPricing("free");
-      setPackPaid("");
-      setPackSize("");
-      setCustomPrice("");
+      setPriceText("");
     } finally {
       setBusy(false);
     }
@@ -219,14 +213,13 @@ export default function OffersScreen(p: Props) {
           </View>
         </View>
 
-        {/* Price chips: Free / At cost / Name a price. The poster chooses;
+        {/* Free, or an exact amount per remaining unit. The poster chooses;
             the app never tracks payment either way. */}
         <View style={styles.chipRow}>
           {(
             [
               ["free", "Free"],
-              ["at_cost", "At cost"],
-              ["custom", "Name a price"],
+              ["amount", "Set a price"],
             ] as [Pricing, string][]
           ).map(([kind, label]) => (
             <Pressable
@@ -254,46 +247,35 @@ export default function OffersScreen(p: Props) {
           ))}
         </View>
 
-        {pricing === "at_cost" && (
-          <View style={styles.formRow}>
-            <TextInput
-              style={[styles.inputSmall, { fontSize: base.fontSize * s, minHeight: base.tapTarget * s }]}
-              placeholder="Pack cost, e.g. 12.99"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="decimal-pad"
-              value={packPaid}
-              onChangeText={setPackPaid}
-              accessibilityLabel="What the whole pack cost"
-            />
-            <TextInput
-              style={[styles.inputSmall, { fontSize: base.fontSize * s, minHeight: base.tapTarget * s }]}
-              placeholder="Pack size, e.g. 4"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="number-pad"
-              value={packSize}
-              onChangeText={setPackSize}
-              accessibilityLabel="How many were in the pack"
-            />
-            <Text
-              style={{ color: colors.textSecondary, fontSize: base.fontSizeSmall * s, alignSelf: "center" }}
-              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
-            >
-              {atCostCents !== null ? `= ${money(atCostCents)} each` : ""}
-            </Text>
-          </View>
-        )}
-
-        {pricing === "custom" && (
+        {pricing === "amount" && (
           <View style={styles.formRow}>
             <TextInput
               style={[styles.inputSmall, { fontSize: base.fontSize * s, minHeight: base.tapTarget * s }]}
               placeholder="Price each, e.g. 2.50"
               placeholderTextColor={colors.textSecondary}
               keyboardType="decimal-pad"
-              value={customPrice}
-              onChangeText={setCustomPrice}
+              value={priceText}
+              onChangeText={setPriceText}
               accessibilityLabel="Price for each one"
             />
+            {/* Echo back what was understood. The decimal key on some keypads
+                is small and easy to miss, so seeing "$2.50 each" (rather than
+                "$250 each") is the cheapest way to catch a mistyped price
+                before it's posted. */}
+            <Text
+              style={{
+                color: priceCents === null ? colors.textSecondary : colors.text,
+                fontSize: base.fontSizeSmall * s,
+                alignSelf: "center",
+              }}
+              maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+            >
+              {priceText.trim() === ""
+                ? "per item"
+                : priceCents === null
+                  ? "enter a number"
+                  : `= ${money(priceCents)} each`}
+            </Text>
           </View>
         )}
 
