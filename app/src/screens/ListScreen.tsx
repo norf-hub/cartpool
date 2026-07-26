@@ -218,7 +218,11 @@ export default function ListScreen({
       item.status === "purchased" &&
       item.purchased_by === userId &&
       assignTargets(item).length > 0;
-    if (item.added_by !== userId && !canAssign) return;
+    // Whoever marked it bought can put it back, even on someone else's item —
+    // ticking the wrong row is the commonest slip there is, and without this
+    // the sheet wouldn't open at all for a non-bulk item you didn't add.
+    const canUnmark = item.status === "purchased" && item.purchased_by === userId;
+    if (item.added_by !== userId && !canAssign && !canUnmark) return;
     setActionItem(item);
   };
 
@@ -238,6 +242,10 @@ export default function ListScreen({
       if (!res.ok) Alert.alert("Couldn't change it", friendlyError(res.error));
     },
     onEditNote: (item: Item) => promptNote(item),
+    onUnmark: async (item: Item) => {
+      const res = await cp.unmarkPurchased(item.id);
+      if (!res.ok) Alert.alert("Couldn't undo it", friendlyError(res.error));
+    },
     onRemove: async (item: Item) => {
       const res = await cp.removeItem(item.id);
       if (!res.ok) Alert.alert("Couldn't remove", friendlyError(res.error));
@@ -491,6 +499,7 @@ export default function ListScreen({
       <ItemActionSheet
         item={actionItem}
         isMine={actionItem?.added_by === userId}
+        isBuyer={actionItem?.purchased_by === userId}
         assignTargets={
           actionItem &&
           actionItem.is_bulk &&
@@ -622,7 +631,12 @@ function Row({
           {pickup
             ? `Pick up from ${nameOf(item.purchased_by)}${when(item.purchased_at)}`
             : purchased
-            ? `Bought by ${nameOf(item.purchased_by)}${when(item.purchased_at)}`
+            ? // "tap to undo" only for the buyer, who is the only one allowed to.
+              // It was previously in the accessibility label alone, so a sighted
+              // user had no way to discover that a mistaken tick was reversible.
+              `Bought by ${nameOf(item.purchased_by)}${when(item.purchased_at)}${
+                mine ? " · tap to undo" : ""
+              }`
             : `For ${nameOf(item.added_by)}`}
           {item.bulk_note ? ` · ${item.bulk_note}` : ""}
           {shareLine}

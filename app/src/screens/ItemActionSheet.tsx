@@ -20,11 +20,14 @@ export type ItemActions = {
   onEditNote: (item: Item) => void;
   onRemove: (item: Item) => void;
   onAssign: (item: Item, targetId: string) => void;
+  /** Put a mistakenly-ticked item back on the list (buyer only). */
+  onUnmark: (item: Item) => void;
 };
 
 export default function ItemActionSheet({
   item,
   isMine,
+  isBuyer,
   assignTargets,
   actions,
   scale: s,
@@ -33,6 +36,8 @@ export default function ItemActionSheet({
   /** The item whose actions to show, or null when the sheet is closed. */
   item: Item | null;
   isMine: boolean;
+  /** True when I'm the one who marked it bought — the only one who can undo. */
+  isBuyer: boolean;
   /** Candidates for retroactive bulk assignment (empty unless buyer + bought bulk). */
   assignTargets: { id: string; name: string }[];
   actions: ItemActions;
@@ -58,6 +63,19 @@ export default function ItemActionSheet({
           >
             {item.text}
           </Text>
+
+          {/* First, because it's the fix for a mistake — and a mistaken tick is
+              the thing people most want to reverse in a hurry. Tapping the row
+              does the same, but nobody thinks to try that when they're worried
+              they've broken something. */}
+          {isBuyer && item.status === "purchased" && (
+            <SheetButton
+              label="Put back on the list"
+              variant="secondary"
+              scale={s}
+              onPress={() => run(() => actions.onUnmark(item))}
+            />
+          )}
 
           {isMine && (
             <SheetButton
