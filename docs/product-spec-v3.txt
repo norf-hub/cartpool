@@ -578,3 +578,28 @@ Group-first framing
     "List" is retained only for the items themselves.
 -   A group with no other members reads as "Just you" rather than "My
     list": a group awaiting people, not a private space.
+
+--------------------------------------------------------------------------
+
+Amendment v3.5 — July 26, 2026: Offer pricing is free or an exact amount
+
+Supersedes the pricing bullet in Amendment v3.2. Client-side only — no
+migration, and existing offers are unaffected.
+
+-   An offer's price is one of TWO choices: free, or the exact amount the
+    poster wants for each remaining unit. The third option — "at cost",
+    where the app divided a pack price by the pack size to suggest a
+    per-unit figure — is REMOVED, along with its two input fields.
+-   Rationale: the suggestion asked the poster to recall a pack price and
+    a pack count in order to be told a number they could just as easily
+    name. Anyone who wants the at-cost figure can still enter it; the app
+    no longer does the arithmetic on their behalf.
+-   Unchanged: the price is a LABEL only. No payment is tracked, there is
+    no "mark as paid", and handoff and money are settled offline,
+    consistent with the no-IOU/no-ledger rule (§10).
+-   Unchanged: the price lives in `offers.unit_price_cents`, with NULL
+    meaning free. The removal cost nothing at the data layer.
+-   Cents are entered with the decimal point ("2.50"), and the form shows
+    the amount it parsed ("= $2.50 each") beneath the field. An amount
+    that cannot be parsed, or is negative, leaves the offer un-postable
+    rather than posting a price the poster did not choose.
