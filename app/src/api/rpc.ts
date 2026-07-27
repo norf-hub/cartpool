@@ -105,6 +105,11 @@ export const redeemInvite = (code: string) =>
   });
 export const chooseKeptGroups = (groupIds: string[]) =>
   call("choose_kept_groups", { p_groups: groupIds });
+/**
+ * Delete the signed-in account and everything it touched (0019). Irreversible,
+ * and the session is dead afterwards — the caller must sign out immediately.
+ */
+export const deleteAccount = () => call("delete_account");
 /** Global notification mute (spec §6, 0018). */
 export const setGlobalMute = (on: boolean) => call("set_global_mute", { p_on: on });
 /** Per-group mute override; null via clearGroupMute follows the global setting. */

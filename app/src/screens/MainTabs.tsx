@@ -283,6 +283,13 @@ export default function MainTabs({ userId }: { userId: string }) {
             onToggleLargeText={(on) => cp.setLargeText(on)}
             onToggleGlobalMute={(on) => cp.setGlobalMute(on)}
             onSignOut={signOut}
+            onDeleteAccount={async () => {
+              const res = await cp.deleteAccount();
+              // Only sign out if the server really deleted it — otherwise the
+              // user is ejected from an account that still exists.
+              if (res.ok) await signOut();
+              return res;
+            }}
           />
         )}
       </View>

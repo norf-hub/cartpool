@@ -2,8 +2,10 @@
 // settings — profile, plan status, the large-text toggle, the global
 // notification mute (spec §6), sign out. The mockup's full history view still
 // waits on its server support.
+import { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import type { Profile, Subscription } from "@/hooks/useCartpool";
+import type { RpcResult } from "@/api/rpc";
 import { base, colors, fonts } from "@/theme";
 import { MAX_OS_FONT_SCALE } from "@/theme/accessibility";
 
@@ -16,6 +18,7 @@ export default function YouScreen({
   onToggleLargeText,
   onToggleGlobalMute,
   onSignOut,
+  onDeleteAccount,
 }: {
   profile: Profile | null;
   groupCount: number;
@@ -26,7 +29,58 @@ export default function YouScreen({
   /** Global notification mute (spec §6). Per-group overrides live on Groups. */
   onToggleGlobalMute: (on: boolean) => void;
   onSignOut: () => void;
+  /** Delete the account and sign out. Resolves to the RPC result. */
+  onDeleteAccount: () => Promise<RpcResult>;
 }) {
+  const [busy, setBusy] = useState(false);
+
+  // Two steps on purpose. The first is the "did you mean to tap that" guard;
+  // the second names the consequences, since this deletes items other people
+  // can see and there is no undo.
+  const confirmDelete = () => {
+    Alert.alert(
+      "Delete your account?",
+      "This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Continue",
+          style: "destructive",
+          onPress: () =>
+            Alert.alert(
+              "Delete everything?",
+              "Your account, your lists, and every item you added or bought will be removed for everyone — including items you bought for other people. You will be signed out.",
+              [
+                { text: "Keep my account", style: "cancel" },
+                { text: "Delete", style: "destructive", onPress: runDelete },
+              ]
+            ),
+        },
+      ]
+    );
+  };
+
+  const runDelete = async () => {
+    setBusy(true);
+    try {
+      const res = await onDeleteAccount();
+      // On success the session is gone and this screen unmounts, so there is
+      // nothing to report. Only a failure needs saying.
+      if (!res.ok) {
+        Alert.alert(
+          "Couldn't delete your account",
+          "Nothing was deleted. Please check your connection and try again."
+        );
+      }
+    } catch {
+      Alert.alert(
+        "Couldn't delete your account",
+        "Nothing was deleted. Please check your connection and try again."
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
   const name = profile?.display_name ?? "You";
   const initials = name
     .split(/\s+/)
@@ -158,6 +212,25 @@ export default function YouScreen({
           Sign out
         </Text>
       </Pressable>
+
+      {/* Account deletion, required in-app by App Store guideline 5.1.1(v).
+          Two confirmations, because it cannot be undone and the second dialog
+          is the one that spells out what actually goes. Kept visually quieter
+          than Sign out so it isn't hit by accident, but not hidden. */}
+      <Pressable
+        onPress={confirmDelete}
+        disabled={busy}
+        style={[styles.deleteAccount, { minHeight: base.tapTarget * s }]}
+        accessibilityRole="button"
+        accessibilityLabel="Delete my account"
+      >
+        <Text
+          style={{ color: colors.textSecondary, fontSize: base.fontSizeSmall * s }}
+          maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+        >
+          {busy ? "Deleting…" : "Delete my account"}
+        </Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -175,6 +248,7 @@ function planLine(sub: Subscription | null): string {
 }
 
 const styles = StyleSheet.create({
+  deleteAccount: { alignItems: "center", justifyContent: "center", paddingBottom: base.spacing },
   root: { flex: 1, backgroundColor: colors.background },
   profileRow: {
     flexDirection: "row",

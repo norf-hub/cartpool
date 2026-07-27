@@ -84,6 +84,29 @@ describe("api wrappers bind identity to auth.uid()", () => {
     ).rejects.toThrow(/permission denied/);
   });
 
+  it("delete_account (0019): deletes the caller and nobody else", async () => {
+    const [a, b] = [await mkUser("a"), await mkUser("b")];
+    await mkGroupWith([a, b]);
+
+    // The api wrapper takes no argument at all, so there is no id to tamper
+    // with — but the parameterized core must stay out of reach, or one call
+    // would delete any account you can name.
+    await expect(
+      asUser(b, (c) => c.query(`select public.delete_account($1)`, [a]))
+    ).rejects.toThrow(/permission denied/);
+
+    const r = await asUser(a, async (c) => {
+      const { rows } = await c.query(`select api.delete_account() as r`);
+      return rows[0].r;
+    });
+    expect(r.ok).toBe(true);
+
+    const alive = async (u: string) =>
+      Number((await q(`select count(*) c from users where id = $1`, [u])).rows[0].c);
+    expect(await alive(a)).toBe(0);
+    expect(await alive(b)).toBe(1);
+  });
+
   it("set_global_mute (0018): writes only the caller's row; internal surface locked", async () => {
     const [a, b] = [await mkUser("a"), await mkUser("b")];
 

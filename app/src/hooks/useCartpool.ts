@@ -388,6 +388,12 @@ export function useCartpool(userId: string | null) {
       return act(() => rpc.setLargeText(on));
     },
     /**
+     * Delete the account (0019). Deliberately NOT wrapped in act(): refresh()
+     * would immediately re-query as a user who no longer exists. The caller
+     * signs out on success instead.
+     */
+    deleteAccount: () => rpc.deleteAccount(),
+    /**
      * Global notification mute (spec §6, 0018). Optimistic like the other
      * settings toggles so the switch doesn't lag the tap.
      */
