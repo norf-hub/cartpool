@@ -18,9 +18,10 @@
    URL and set the same Authorization value as the `REVENUECAT_WEBHOOK_AUTH`
    function secret. The 3-month free period is server-side (`trial_ends_at`),
    not a store trial — nothing to set up in the stores for it.
-6. **GitHub** — repo + branch protection; CI already in `.github/workflows`.
-   After the first `npm install`, commit `package-lock.json` and switch CI to
-   `npm ci`.
+6. **GitHub** — repo + branch protection. DONE except branch protection: the
+   repo is at github.com/norf-hub/cartpool, CI runs both jobs on push to main
+   and on PRs, `package-lock.json` is committed, and CI already uses `npm ci`
+   against a `postgres:17` service container.
 7. **cartpool.app domain** — register it and serve the two association files
    that make invite links (`https://cartpool.app/i/{code}`) open the app:
    `/.well-known/apple-app-site-association` (appID

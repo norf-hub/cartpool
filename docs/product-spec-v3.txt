@@ -603,3 +603,51 @@ migration, and existing offers are unaffected.
     the amount it parsed ("= $2.50 each") beneath the field. An amount
     that cannot be parsed, or is negative, leaves the offer un-postable
     rather than posting a price the poster did not choose.
+
+--------------------------------------------------------------------------
+
+Amendment v3.6 — July 26, 2026: Account deletion, and large text by default
+
+Two unrelated changes, both implemented: deletion in migration 0019, the
+display default in 0017.
+
+Account deletion
+
+-   App Store guideline 5.1.1(v) requires an app that creates accounts to
+    let a user delete one FROM INSIDE the app. It lives on the You tab
+    below Sign out, behind two confirmations: the first guards a mis-tap,
+    the second names the consequences. It is quieter than Sign out so it
+    is not hit by accident, but it is not hidden.
+-   Deletion is a HARD delete, not a deactivation or an anonymised
+    tombstone. The account row and everything the user touched are
+    removed at once: their items (open AND purchased), their bulk
+    opt-ins, their offers and claims, memberships, waitlist entries,
+    blocks in both directions, push tokens, and the subscription row.
+-   ACCEPTED COST, recorded so it is not later mistaken for a bug: a
+    groupmate who bought something for the departing user loses that
+    record immediately, with no window to settle up. This erases more
+    than leaving a group does — §3's leave rules deliberately keep a
+    leaver's purchased items visible for 2 days for exactly that reason.
+    Deletion overrides that in favour of erasing on request.
+-   Items SOMEONE ELSE added, which the departing user had marked bought,
+    are handed back as OPEN rather than destroyed. They belong to the
+    adder, so they return to that person's list.
+-   A group left with no active members is soft-deleted, as when the last
+    member leaves. A group that still has members offers the freed seat
+    to whoever is waiting, per the §3 waitlist rules.
+-   The sign-in identity is destroyed too, not just the app-side rows.
+    Leaving it would allow signing in again into a session with no
+    account behind it, since provisioning only fires on first signup.
+-   leave_group is NOT reused for this. It grants the 2-day grace this
+    policy overrides, and it recreates a solo group for anyone left with
+    none — which would resurrect the account being erased.
+
+Large text by default
+
+-   The §7 large-text display mode is now ON for new accounts rather than
+    off. Someone who does not need it can turn it off in one tap on the
+    You tab; someone who does need it may never find the toggle at all,
+    and that asymmetry decides the default.
+-   Existing accounts keep whatever they have. Nothing distinguishes a
+    deliberate "off" from an untouched setting, and overriding a real
+    preference is worse than leaving an old account as it was.

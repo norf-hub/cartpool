@@ -7,8 +7,14 @@ PC's local stack — that's what lets friends test from their own homes, not jus
 on your Wi-Fi. Before any of this, make sure the hosted project is current:
 
 ```powershell
-supabase db push   # applies 0009, 0010, 0011 to cartpool-dev
+supabase db push   # applies every migration cartpool-dev is missing
 ```
+
+As of amendment v3.6 the hosted project is behind local by 0013-0019, which
+includes onboarding's `set_display_name`, group naming, the mute setters and
+account deletion. Pointing a phone at hosted without pushing these first leaves
+a new sign-in stuck on the name screen. Check what's pending with
+`supabase migration list`.
 
 and point `app/.env` at the hosted project (the commented-out `https://…`
 lines — see the note at the top of that file), then restart `npx expo start`.
