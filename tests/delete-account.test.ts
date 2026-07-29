@@ -99,6 +99,53 @@ describe("delete_account (0019)", () => {
     ).toBe(0);
   });
 
+  it("puts a deleted claimer's units back on someone else's open offer", async () => {
+    const [poster, claimer] = [await mkUser("poster"), await mkUser("claimer")];
+    const g = await mkGroupWith([poster, claimer]);
+    const offer = (
+      await rpc<{ ok: boolean; offer_id: string }>("create_offer", [
+        g,
+        poster,
+        "nail clippers",
+        4,
+        null,
+      ])
+    ).offer_id;
+    expect(await rpc<R>("claim_offer", [offer, claimer, 3])).toMatchObject({ ok: true });
+
+    const remaining = async () =>
+      Number((await q(`select qty_remaining from offers where id = $1`, [offer])).rows[0].qty_remaining);
+    expect(await remaining()).toBe(1);
+
+    expect(await rpc<R>("delete_account", [claimer])).toMatchObject({ ok: true });
+
+    // The 3 units were never the claimer's to take with them. Leaving
+    // qty_remaining at 1 would strand them: claim_offer gates on this counter,
+    // so poster's 4-pack would advertise 1 forever.
+    expect(await remaining()).toBe(4);
+    expect(await count(`select count(*) c from offer_claims where user_id = $1`, [claimer])).toBe(0);
+    // The offer itself belongs to poster and survives.
+    expect(await count(`select count(*) c from offers where id = $1`, [offer])).toBe(1);
+  });
+
+  it("takes the leaver's own offers, and other members' claims on them", async () => {
+    const [poster, claimer] = [await mkUser("poster"), await mkUser("claimer")];
+    const g = await mkGroupWith([poster, claimer]);
+    const offer = (
+      await rpc<{ ok: boolean; offer_id: string }>("create_offer", [g, poster, "spare mugs", 2, null])
+    ).offer_id;
+    await rpc("claim_offer", [offer, claimer, 1]);
+
+    expect(await rpc<R>("delete_account", [poster])).toMatchObject({ ok: true });
+
+    // The offer was the deleted account's own, so it goes and takes claimer's
+    // claim with it via the 0012 cascade — the same deliberate cost as an item
+    // someone else had bought.
+    expect(await count(`select count(*) c from offers where id = $1`, [offer])).toBe(0);
+    expect(await count(`select count(*) c from offer_claims where offer_id = $1`, [offer])).toBe(0);
+    expect(await count(`select count(*) c from users where id = $1`, [claimer])).toBe(1);
+  });
+
   it("is a no-op for an account that isn't there", async () => {
     const u = await mkUser("twice");
     expect(await rpc<R>("delete_account", [u])).toMatchObject({ ok: true });

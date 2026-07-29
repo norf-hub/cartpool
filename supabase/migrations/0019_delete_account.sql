@@ -45,6 +45,28 @@ begin
 
   -- Their claims on other people's offers, then their own offers (whose
   -- claims, including other members', cascade with the offer).
+  --
+  -- Units claimed against a STILL-OPEN offer go back on the shelf before the
+  -- claim row goes. qty_remaining is the poster's live availability count, so
+  -- dropping the claim without crediting it back would strand those units
+  -- permanently: the offer would advertise fewer than it actually has and no
+  -- one could ever claim the difference. That penalises the poster, who has
+  -- done nothing, and is not part of the hard-delete bargain — the erasure is
+  -- meant to cost this account its own history, not other people's stock.
+  -- Same restore as unclaim_offer (0012) and leave_group.
+  --
+  -- Closed and expired offers are deliberately left alone, matching
+  -- unclaim_offer: once an offer is over, claims stand as the record of who
+  -- took what and qty_remaining no longer gates anything. One claim row per
+  -- (offer, user) is guaranteed unique (0012), so this cannot double-credit.
+  update offers o
+     set qty_remaining = o.qty_remaining + oc.qty
+    from offer_claims oc
+   where oc.offer_id = o.id
+     and oc.user_id = p_user
+     and o.closed_at is null
+     and o.expires_at >= now();
+
   delete from offer_claims where user_id = p_user;
   delete from offers where posted_by = p_user;
 
