@@ -10,9 +10,10 @@ on your Wi-Fi. Before any of this, make sure the hosted project is current:
 supabase db push   # applies every migration cartpool-dev is missing
 ```
 
-As of 2026-07-28 the hosted project is current through 0019 — onboarding's
-`set_display_name`, group naming, the mute setters and account deletion are all
-there, so a new sign-in no longer strands on the name screen. Check with
+As of 2026-07-28 the hosted project is current through 0020 — onboarding's
+`set_display_name`, group naming, the mute setters, account deletion and the
+purchase-notification trigger are all there, so a new sign-in no longer strands
+on the name screen. Check with
 `supabase migration list`: every migration should show a `remote` version. If
 one doesn't, push before handing out builds.
 
