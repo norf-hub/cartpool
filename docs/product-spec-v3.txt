@@ -651,3 +651,38 @@ Large text by default
 -   Existing accounts keep whatever they have. Nothing distinguishes a
     deliberate "off" from an untouched setting, and overriding a real
     preference is worse than leaving an old account as it was.
+
+--------------------------------------------------------------------------
+
+Amendment v3.7 — July 28, 2026: Purchase notifications go to the adder
+
+Resolves a question §6 left open — it specified instant per-item pushes and
+the two mute toggles, but never said WHO receives one. Implemented in
+migration 0020.
+
+-   A purchase notifies the person who ADDED the item, and nobody else.
+    Amendment v3.3 made an item belong to its adder and reduced group_id to
+    provenance; the group is no longer the right audience for anything about
+    an item. Notifying every member would tell four people about a
+    transaction between two of them.
+-   This is the same signal the v3.3 "To pick up" section is built on: you
+    should never have to hunt for who is holding your groceries, and you
+    should not have to open the app to discover that someone is.
+-   Checking off your own item is silent. v3 §4 allows the adder to mark
+    their own item purchased and it is the entire solo flow; announcing to
+    someone a thing they just did themselves is noise.
+-   §6's accepted "ten pings after a big Costco run" is unchanged in
+    principle but smaller in practice: if those ten items belonged to three
+    people, each hears only about their own. Immediacy over batching still
+    stands — there is no digest.
+-   The mute rules are unchanged (per-group override wins when set,
+    otherwise the global toggle). What changed is where they are enforced:
+    in Postgres, as part of deciding the recipient, rather than in the edge
+    function. They are correctness rules, and the test suite runs against a
+    real database, so they now live somewhere they can be proven.
+-   Unchanged: §4.2 per-group stacking still keys on the item's home group,
+    which remains the right grouping for a tray of notifications even though
+    it no longer determines who is notified.
+-   Non-goals: no notification when an item is merely ADDED (the list is
+    pull, not push, for the people who might shop); no notification to the
+    buyer; no digest or batching.

@@ -40,8 +40,9 @@ supabase/
   migrations/0017_large_text_default.sql  v3.6: large text ON for new accounts
   migrations/0018_mute_toggles.sql  §6 setters for global_mute and the per-group override (columns existed since 0001; send-push already read them)
   migrations/0019_delete_account.sql  v3.6: in-app account deletion, hard delete, FK-safe order (App Store 5.1.1(v))
+  migrations/0020_purchase_notifications.sql  §6: notify the item's ADDER when someone buys it — purchase_notice() decides recipient + mutes, trigger delivers via pg_net
   functions/revenuecat-webhook/  Edge function -> handle_entitlement_event (service_role)
-  functions/send-push/           Purchase push fan-out with §4.2 per-group stacking. NOTHING INVOKES IT YET — see "Not yet built"
+  functions/send-push/           Dumb sender: resolved recipient in, Expo request out, §4.2 per-group stacking. Invoked by 0020's trigger
 tests/                  Section 6 unit tests + auth tests (vitest + pg, real Postgres)
 .github/workflows/ci.yml         Tests run against a postgres:17 service container
 ```
@@ -107,6 +108,7 @@ The suite drops and rebuilds `public` from `supabase/migrations` on each run.
 | `offers.test.ts` | v3.2 up-for-grabs: multi-unit accumulating claims (Bill takes 1, 2, or all 3); racing claims can't oversell (conservation check); unclaim restores; poster-only close with claims standing; expiry + purge; leave-group housekeeping; frozen users barred |
 | `cross-group.test.ts` | v3.3: one canonical item row visible to the adder's whole pool; first buyer anywhere clears it everywhere; leaving re-homes rather than deletes |
 | `provisioning.test.ts` | 0006 signup trigger provisions users row (same id) + subscription + solo group; display-name fallback; **v3.6: large text on by default**; push token upsert, re-pointing on re-login, platform validation, owner-only unregister |
+| `notifications.test.ts` | §6 purchase notices: addressed to the **adder**, not the group (v3.3); silent on an open item and on checking off your own; global mute; per-group override both ways (silence one group, unmute one group under a global mute) and clearing it; the trigger never costs a purchase when push is unconfigured, and stays silent on unmark |
 | `delete-account.test.ts` | v3.6 hard delete: every referencing row goes; items others added are handed back as `open`; the leaver's own items go even when someone else paid (the accepted cost); emptied groups soft-deleted while shared ones survive; blocks cleared both directions; second delete is `not_found` |
 
 ## Not yet built
@@ -117,11 +119,14 @@ Ordered by what blocks a submission. Infra/account steps are in `INFRA.md`.
   Buy. `react-native-purchases` is already a dependency, so this is wiring plus
   RevenueCat store products, which need the Apple/Google accounts first
   (INFRA.md steps 1, 2, 5). Must be real before submitting.
-- **Nothing sends a notification.** `functions/send-push` is complete and
-  respects both mute settings, but no trigger, cron job, or client call invokes
-  it, so no push can ever fire. Needs a database webhook (or `pg_net`) with a
-  service-role credential — deliberately deferred because it cannot be verified
-  end to end until there is an EAS project and a development build.
+- **Notifications are wired but undeliverable.** 0020 added the missing
+  invocation: a trigger on the open→purchased transition calls
+  `purchase_notice()` (recipient + mute rules, covered by
+  `notifications.test.ts`) and posts it to `send-push` via `pg_net`. What is
+  still missing is a device to send to — see the next item — plus the two
+  database settings in INFRA.md step 3, without which the trigger is inert.
+  So the logic is proven; end-to-end delivery is not, and cannot be until EAS
+  exists.
 - **Push tokens can't be fetched yet.** `usePush` registers on sign-in, but
   `getExpoPushTokenAsync` needs an EAS `projectId` that does not exist until
   `eas init` (INFRA.md step 4). Until then registration logs

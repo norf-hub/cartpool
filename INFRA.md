@@ -7,7 +7,21 @@
    closed-testing period before production. Draft listing early.
 3. **Supabase** — three projects (dev / staging / prod). Enable phone/OTP auth
    (Twilio credentials), apply `supabase/migrations`, enable pg_cron and
-   schedule `purge_retention()` daily.
+   schedule `purge_retention()` daily. Then wire purchase notifications
+   (0020): deploy `supabase/functions/send-push` and point the trigger at it.
+   The endpoint and key are database settings rather than migration content,
+   because a migration is committed to git and the key is a credential:
+
+   ```sql
+   alter database postgres
+     set cartpool.push_endpoint = 'https://<ref>.supabase.co/functions/v1/send-push';
+   alter database postgres
+     set cartpool.service_role_key = '<service role key>';
+   ```
+
+   Until both are set the trigger is inert — purchases work, nothing sends.
+   Note that no push can actually arrive until step 4 exists, since devices
+   cannot obtain an Expo token without an EAS `projectId`.
 4. **Expo / EAS** — org + project, EAS Build/Submit configured for the three
    channels; register the APNs key and FCM server key with Expo push.
 5. **RevenueCat** — separate project/API keys per environment; two store
