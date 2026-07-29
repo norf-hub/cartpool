@@ -686,3 +686,29 @@ migration 0020.
 -   Non-goals: no notification when an item is merely ADDED (the list is
     pull, not push, for the people who might shop); no notification to the
     buyer; no digest or batching.
+
+When permission is requested
+
+-   Notifications are ON by default and always have been: global_mute
+    defaults to false and mute_override defaults to null (follow global).
+    Nothing about the app's own settings needs changing for a new user to
+    receive pings.
+-   What actually decided the outcome was the OS permission, and the app
+    requested it at sign-in — which meant iOS's system dialog appeared during
+    onboarding, on the name screen, before the user had seen a list or
+    learned what Cartpool does.
+-   That dialog is shown ONCE per install. A decline is permanent from the
+    app's side; the only route back is the Settings app. Spending that single
+    chance on a cold prompt, to an audience that skews elderly and is right
+    to be wary of an unfamiliar app's first request, is the same asymmetry
+    that decided the large-text default in v3.6 — and it decides this the
+    same way.
+-   Permission is therefore requested when the user first SHARES a group with
+    somebody. That is also the first moment the app can keep the promise: a
+    purchase notice fires only when someone else buys your item, which cannot
+    happen while you are the sole member of your groups. Asking a solo user
+    spends the one chance on something that will never arrive.
+-   If permission is refused anyway, the You tab says so plainly and offers
+    the route to Settings. The mute switch alone would read "off" — true of
+    the Cartpool setting, and misleading about what the user will actually
+    receive.

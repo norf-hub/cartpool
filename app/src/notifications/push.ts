@@ -26,6 +26,30 @@ Notifications.setNotificationHandler({
 let currentToken: string | null = null;
 
 /**
+ * "unsupported" covers web and simulators — a device that can never receive a
+ * push, which is not the same as a user who said no.
+ */
+export type PushPermission = "granted" | "denied" | "undetermined" | "unsupported";
+
+/**
+ * Read the OS permission WITHOUT prompting. Needed because iOS shows its
+ * system dialog exactly once per install: after a decline the app cannot ask
+ * again, and the only route back is the Settings app. Something has to notice
+ * that state, or "notifications are on by default" is quietly false for that
+ * user with nothing in the UI to explain why.
+ */
+export async function getPushPermission(): Promise<PushPermission> {
+  if (Platform.OS !== "ios" && Platform.OS !== "android") return "unsupported";
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status === "granted") return "granted";
+    return status === "denied" ? "denied" : "undetermined";
+  } catch {
+    return "unsupported";
+  }
+}
+
+/**
  * Ask for permission and register this device's token against the signed-in
  * user. Returns null — never throws — when push isn't available, which is the
  * normal case in Expo Go and on simulators, and also until the EAS project

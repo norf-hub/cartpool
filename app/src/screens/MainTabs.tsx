@@ -122,14 +122,24 @@ export default function MainTabs({ userId }: { userId: string }) {
     [cp.offers]
   );
 
+  // A purchase notice only ever fires when someone ELSE buys YOUR item (0020),
+  // so it cannot happen until somebody shares a group with you. Registration
+  // waits for that: it triggers iOS's one-shot permission dialog, and asking
+  // during onboarding spent that single chance on a stranger's name screen.
+  const sharable = useMemo(
+    () => cp.groups.some((g) => g.memberIds.length > 1),
+    [cp.groups]
+  );
+
   // Register this device for push, and keep one Android channel per group so a
   // big Costco run collapses into a single stack. Lives here because this is
   // the first thing rendered after sign-in, and because groupTitle gives the
   // channels the same names the user sees. Must sit above the early returns
   // below — onboarding and the downgrade gate must not skip registration.
-  usePush(
+  const pushPermission = usePush(
     userId,
-    cp.groups.map((g) => ({ id: g.id, title: groupTitle(g.id) }))
+    cp.groups.map((g) => ({ id: g.id, title: groupTitle(g.id) })),
+    sharable
   );
 
   // Onboarding outranks everything for a new account: name yourself, then the
@@ -280,8 +290,10 @@ export default function MainTabs({ userId }: { userId: string }) {
             subscription={cp.subscription}
             scale={s}
             largeText={largeText}
+            pushBlocked={pushPermission === "denied"}
             onToggleLargeText={(on) => cp.setLargeText(on)}
             onToggleGlobalMute={(on) => cp.setGlobalMute(on)}
+            onOpenSystemSettings={() => void Linking.openSettings()}
             onSignOut={signOut}
             onDeleteAccount={async () => {
               const res = await cp.deleteAccount();

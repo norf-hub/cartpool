@@ -15,8 +15,10 @@ export default function YouScreen({
   subscription,
   scale: s,
   largeText,
+  pushBlocked,
   onToggleLargeText,
   onToggleGlobalMute,
+  onOpenSystemSettings,
   onSignOut,
   onDeleteAccount,
 }: {
@@ -25,9 +27,17 @@ export default function YouScreen({
   subscription: Subscription | null;
   scale: number;
   largeText: boolean;
+  /**
+   * The OS is refusing notifications for this app. Distinct from the mute
+   * below: the mute is the user's choice inside Cartpool and is one tap to
+   * undo, whereas this can only be undone in the Settings app.
+   */
+  pushBlocked: boolean;
   onToggleLargeText: (on: boolean) => void;
   /** Global notification mute (spec §6). Per-group overrides live on Groups. */
   onToggleGlobalMute: (on: boolean) => void;
+  /** Opens this app's page in the system Settings app. */
+  onOpenSystemSettings: () => void;
   onSignOut: () => void;
   /** Delete the account and sign out. Resolves to the RPC result. */
   onDeleteAccount: () => Promise<RpcResult>;
@@ -192,6 +202,41 @@ export default function YouScreen({
             accessibilityLabel="Mute all notifications"
           />
         </View>
+
+        {/* Only when the OS is blocking us. The mute switch above still reads
+            "off", which is true of the Cartpool setting and misleading about
+            what the user will actually receive — so say what is really
+            happening and give the one route back, since iOS will not show its
+            permission dialog a second time. */}
+        {pushBlocked && (
+          <Pressable
+            onPress={onOpenSystemSettings}
+            style={[styles.settingRow, { minHeight: base.rowMinHeight * s }]}
+            accessibilityRole="button"
+            accessibilityLabel="Turn on notifications in Settings"
+          >
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontSize: base.fontSize * s,
+                  color: colors.text,
+                  fontFamily: fonts.bodyMedium,
+                }}
+                maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+              >
+                Notifications are blocked
+              </Text>
+              <Text
+                style={{ fontSize: base.fontSizeSmall * s, color: colors.textSecondary }}
+                maxFontSizeMultiplier={MAX_OS_FONT_SCALE}
+              >
+                Your phone is set to block Cartpool notifications, so you will
+                not hear when someone buys something for you. Tap to open
+                Settings.
+              </Text>
+            </View>
+          </Pressable>
+        )}
       </View>
 
       <Pressable

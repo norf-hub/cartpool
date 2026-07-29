@@ -127,7 +127,10 @@ Ordered by what blocks a submission. Infra/account steps are in `INFRA.md`.
   database settings in INFRA.md step 3, without which the trigger is inert.
   So the logic is proven; end-to-end delivery is not, and cannot be until EAS
   exists.
-- **Push tokens can't be fetched yet.** `usePush` registers on sign-in, but
+- **Push tokens can't be fetched yet.** `usePush` registers once you share a
+  group with someone (v3.7 — the permission dialog is one-shot on iOS, so it
+  waits for a moment when the reason is visible and the promise is keepable),
+  but
   `getExpoPushTokenAsync` needs an EAS `projectId` that does not exist until
   `eas init` (INFRA.md step 4). Until then registration logs
   `[push] registration unavailable` and returns null by design.
