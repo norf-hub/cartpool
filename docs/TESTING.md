@@ -10,11 +10,11 @@ on your Wi-Fi. Before any of this, make sure the hosted project is current:
 supabase db push   # applies every migration cartpool-dev is missing
 ```
 
-As of amendment v3.6 the hosted project is behind local by 0013-0019, which
-includes onboarding's `set_display_name`, group naming, the mute setters and
-account deletion. Pointing a phone at hosted without pushing these first leaves
-a new sign-in stuck on the name screen. Check what's pending with
-`supabase migration list`.
+As of 2026-07-28 the hosted project is current through 0019 — onboarding's
+`set_display_name`, group naming, the mute setters and account deletion are all
+there, so a new sign-in no longer strands on the name screen. Check with
+`supabase migration list`: every migration should show a `remote` version. If
+one doesn't, push before handing out builds.
 
 and point `app/.env` at the hosted project (the commented-out `https://…`
 lines — see the note at the top of that file), then restart `npx expo start`.
